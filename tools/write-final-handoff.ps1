@@ -6,7 +6,12 @@ param(
     [string]$TaskId = '',
     [string]$TestLevel = 'none',
     [switch]$SkipE2E,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [ValidateSet('none','claude')]
+    [string]$Reviewer = 'none',
+    [switch]$RunReviewer,
+    [ValidateSet('prompt-only','print')]
+    [string]$ClaudeReviewMode = 'prompt-only'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,9 +65,68 @@ if ($null -ne $detectedJson -and ($detectedJson.PSObject.Properties.Name -contai
     $noTestsFound = [bool]$detectedJson.noTestsFound
 }
 
-# Result logic
+# Claude review artifacts (Phase 3)
+$reviewPromptPath = Join-Path $RunFolder 'claude-review-prompt.md'
+$reviewOutputPath = Join-Path $RunFolder 'claude-review.md'
+$reviewPromptExists = Test-Path -LiteralPath $reviewPromptPath
+$reviewOutputExists = Test-Path -LiteralPath $reviewOutputPath
+$reviewOutputText = ''
+if ($reviewOutputExists) {
+    try { $reviewOutputText = Get-Content -LiteralPath $reviewOutputPath -Raw -ErrorAction SilentlyContinue } catch { $reviewOutputText = '' }
+    if ($null -eq $reviewOutputText) { $reviewOutputText = '' }
+}
+
+# Parse the Claude verdict: look for a "## Verdict" section followed by a single
+# token "approve" | "request_changes" | "block". Anything else is treated as
+# unknown so the handoff cannot accidentally claim approval.
+$reviewVerdict = $null            # one of approve|request_changes|block when detected
+$reviewExecuted = $false          # true only when claude-review.md looks like a real review
+if ($reviewOutputExists) {
+    if ($reviewOutputText -match '(?ms)^##\s*Verdict\s*$\s*\n+\s*(approve|request_changes|block)\b') {
+        $reviewVerdict = $matches[1].ToLowerInvariant()
+        $reviewExecuted = $true
+    } elseif ($reviewOutputText -match '(?im)^Verdict\s*:\s*(approve|request_changes|block)\b') {
+        $reviewVerdict = $matches[1].ToLowerInvariant()
+        $reviewExecuted = $true
+    }
+    # The placeholder file used when -RunReviewer is not set must NOT be classified as executed.
+    if ($reviewOutputText -match 'Claude review was requested but not executed') {
+        $reviewExecuted = $false
+        $reviewVerdict = $null
+    }
+    if ($reviewOutputText -match 'Automatic Claude review could not be executed safely') {
+        $reviewExecuted = $false
+        $reviewVerdict = $null
+    }
+}
+
+# Reviewer mode label for the handoff.
+$reviewerModeLabel = ''
+if ($Reviewer -eq 'none') {
+    $reviewerModeLabel = 'disabled (Reviewer=none)'
+} elseif ($RunReviewer) {
+    $reviewerModeLabel = "auto-execute (mode=$ClaudeReviewMode)"
+} else {
+    $reviewerModeLabel = "prompt-only (mode=$ClaudeReviewMode)"
+}
+
+# Result logic (Phase 3 verdict-aware).
+# Priority: tests-failed > verdict=block > verdict=request_changes > verdict=approve+tests-passed > verdict=approve > Phase 2 fallback.
 $result = ''
-if ($null -ne $testSummary -and $testSummary.dryRun) {
+$testsFailed = ($null -ne $testSummary -and $testSummary.anyFailed)
+$testsPassed = ($null -ne $testSummary -and $testSummary.allPassed)
+
+if ($testsFailed) {
+    $result = 'tests failed, manual review required'
+} elseif ($reviewExecuted -and $reviewVerdict -eq 'block') {
+    $result = 'Claude review verdict: block — manual review required'
+} elseif ($reviewExecuted -and $reviewVerdict -eq 'request_changes') {
+    $result = 'Claude review verdict: request changes — manual review required'
+} elseif ($reviewExecuted -and $reviewVerdict -eq 'approve' -and $testsPassed) {
+    $result = 'Claude review approved and tests passed — manual approval still required'
+} elseif ($reviewExecuted -and $reviewVerdict -eq 'approve') {
+    $result = 'Claude review approved (no automated verification of tests this run) — manual approval still required'
+} elseif ($null -ne $testSummary -and $testSummary.dryRun) {
     $result = 'manual review required (DryRun: tests not executed)'
 } elseif ($TestLevel -eq 'none') {
     $result = 'manual review required (TestLevel=none: tests not executed)'
@@ -72,9 +136,7 @@ if ($null -ne $testSummary -and $testSummary.dryRun) {
     } else {
         $result = 'manual review required — no commands matched the requested TestLevel/SkipE2E selection'
     }
-} elseif ($null -ne $testSummary -and $testSummary.anyFailed) {
-    $result = 'tests failed, manual review required'
-} elseif ($null -ne $testSummary -and $testSummary.allPassed) {
+} elseif ($testsPassed) {
     $result = 'tests passed, manual review still required'
 } else {
     $result = 'manual review required'
@@ -113,10 +175,13 @@ $paramLines += ("- TaskId: {0}" -f $taskText)
 $paramLines += ("- TestLevel: {0}" -f $TestLevel)
 $paramLines += ("- SkipE2E: {0}" -f [bool]$SkipE2E)
 $paramLines += ("- DryRun: {0}" -f [bool]$DryRun)
+$paramLines += ("- Reviewer: {0}" -f $Reviewer)
+$paramLines += ("- RunReviewer: {0}" -f [bool]$RunReviewer)
+$paramLines += ("- ClaudeReviewMode: {0}" -f $ClaudeReviewMode)
 
 # Risks
 $risks = @()
-$risks += '- Phase 2 harness only: no Codex implementation, no Claude review, no auto-fix loop has run.'
+$risks += '- Phase 3 harness: Claude review is reviewer-only. Codex implementation, auto-fix loops, AutoCommit, push, and deploy remain disabled.'
 $risks += '- Any uncommitted changes shown above are unverified local edits.'
 if ($noTestsFound) {
     $risks += '- No test runners were detected in this repository, so no automated validation is possible from this harness.'
@@ -127,13 +192,20 @@ if ($null -ne $testSummary -and $testSummary.anyFailed) {
 if ($TestLevel -eq 'e2e' -or ($TestLevel -in @('integration','all') -and -not [bool]$SkipE2E)) {
     $risks += '- E2E commands are eligible at this TestLevel. They can have side effects (browsers, network); review before re-running.'
 }
+if ($Reviewer -eq 'claude' -and -not $RunReviewer) {
+    $risks += '- Reviewer=claude was requested but Claude CLI was NOT invoked. Run the prompt manually or rerun with -RunReviewer after verifying local Claude CLI flags.'
+}
+if ($Reviewer -eq 'claude' -and $RunReviewer -and -not $reviewExecuted) {
+    $risks += '- Automatic Claude review could not be executed safely with the chosen review-only invocation pattern. See claude-review.md for details.'
+}
 
 # Next steps
 $nextSteps = @()
-$nextSteps += '1. Read this handoff and `test-output.txt` (if present).'
+$nextSteps += '1. Read this handoff, `test-output.txt` (if present), and `claude-review.md` (if present).'
 $nextSteps += '2. Decide whether to commit. The harness will not commit, push, or deploy.'
 $nextSteps += '3. If `noTestsFound` is true, treat the run as "manual review required" — there is no automated verification.'
-$nextSteps += '4. Phase 2 still defers Codex implementation, Claude Code review, auto-fix loops, and AutoCommit.'
+$nextSteps += '4. If a Claude review verdict is missing or non-`approve`, address blocking issues before approval.'
+$nextSteps += '5. Phase 3 still defers Codex implementation, auto-fix loops, AutoCommit, push, and deploy.'
 
 # Suggested manual verification
 $verifySteps = @()
@@ -159,7 +231,7 @@ $lines += $RunFolder
 $lines += ''
 $lines += '## Autopilot Phase'
 $lines += ''
-$lines += 'Phase 2 (test detection + optional safe execution; Codex/Claude/commit/push/deploy still disabled)'
+$lines += 'Phase 3 (Claude review prompt + optional review-only Claude invocation; Codex/auto-fix/commit/push/deploy still disabled)'
 $lines += ''
 $lines += '## Parameters'
 $lines += ''
@@ -205,6 +277,43 @@ if (Test-Path -LiteralPath $testSummaryPath) {
     $lines += '- Summary: (not generated)'
 }
 $lines += ''
+$lines += '## Claude Review'
+$lines += ''
+$lines += ('- Mode: {0}' -f $reviewerModeLabel)
+if ($reviewPromptExists) {
+    $lines += ('- Prompt: ' + $bt + $reviewPromptPath + $bt)
+} else {
+    $lines += '- Prompt: (not generated)'
+}
+if ($reviewOutputExists) {
+    $lines += ('- Output: ' + $bt + $reviewOutputPath + $bt)
+} else {
+    $lines += '- Output: (not generated)'
+}
+if ($Reviewer -ne 'claude') {
+    $lines += '- Status: Reviewer disabled. No Claude review prompt or output was generated.'
+} elseif (-not $RunReviewer) {
+    $lines += '- Status: Claude review prompt generated but Claude was not executed.'
+} elseif ($reviewExecuted) {
+    $lines += '- Status: Claude review captured.'
+} else {
+    $lines += '- Status: Automatic Claude review could not be executed safely. See `claude-review.md` for details.'
+}
+if ($null -ne $reviewVerdict) {
+    $lines += ('- Verdict: ' + $reviewVerdict)
+} else {
+    $lines += '- Verdict: (not detected)'
+}
+$lines += ''
+if ($reviewOutputExists -and -not [string]::IsNullOrWhiteSpace($reviewOutputText)) {
+    $reviewLinesArr = ($reviewOutputText -split "`r?`n")
+    $previewMax = 80
+    $preview = if ($reviewLinesArr.Count -gt $previewMax) { ($reviewLinesArr[0..($previewMax - 1)] -join [Environment]::NewLine) + [Environment]::NewLine + '... (truncated; full content in claude-review.md)' } else { $reviewOutputText.TrimEnd() }
+    $lines += '### Claude Review Summary'
+    $lines += ''
+    $lines += $preview
+    $lines += ''
+}
 $lines += '## Result'
 $lines += ''
 $lines += $result

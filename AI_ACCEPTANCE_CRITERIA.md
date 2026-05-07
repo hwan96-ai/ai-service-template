@@ -87,9 +87,48 @@ The harness is "done" for Phase 2 when ALL of the following are true.
 - [ ] `.gitignore` ignores `.claude/` (local Claude Code CLI state) so it never appears in `git status`
 - [ ] `.gitignore` continues to ignore `ai-runs/*` while preserving the `ai-runs/.gitkeep` sentinel
 
-## Out of Scope for Phase 2
+## Phase 3 — Claude review prompt + optional reviewer
+
+The harness is "done" for Phase 3 when ALL of the following are true.
+
+### Review prompt generation
+
+- [ ] `tools/write-claude-review-prompt.ps1` exists and is invoked when `-Reviewer claude` is passed
+- [ ] Running `ai-autopilot.ps1 -Reviewer claude` creates `claude-review-prompt.md` under the run folder
+- [ ] `claude-review-prompt.md` includes the explicit directive `Do not edit files. Do not run commands. Review only.`
+- [ ] The prompt requests a structured response with sections: Verdict, Summary, Blocking Issues, Non-blocking Issues, Test Assessment, Safety Assessment, Suggested Fix Prompt For Codex, Approval Readiness, Suggested Commit Message
+- [ ] The prompt embeds only summary artifacts (`git-status.txt`, `git-diff-stat.txt`, `git-diff-names.txt`, `detected-tests.md`, `test-summary.json`, head of `test-output.txt`, optional `AI_FINAL_HANDOFF.md`) and NEVER raw file diffs or secret material
+
+### Reviewer execution
+
+- [ ] Without `-RunReviewer`, the harness does NOT spawn the Claude CLI process
+- [ ] Without `-RunReviewer`, `claude-review.md` contains the placeholder `Claude review was requested but not executed.` and points the human at `claude-review-prompt.md`
+- [ ] With `-RunReviewer`, the harness attempts the safest review-only Claude invocation pattern (`-p`, `--output-format text`, `--tools ""`) and never uses `--dangerously-skip-permissions`, `acceptEdits`, `bypassPermissions`, allowed-edit, or allowed-bash flags
+- [ ] If the local Claude CLI does not accept the review-only invocation, `claude-review.md` clearly says automatic review could not be executed safely and the harness still finishes the final handoff
+- [ ] No alternative permissive Claude modes are attempted as a fallback
+
+### Handoff integration
+
+- [ ] `write-final-handoff.ps1` adds a `## Claude Review` section listing Mode, Prompt path, Output path, Status, and Verdict
+- [ ] When `claude-review.md` exists, the handoff includes either its full content or a clearly truncated preview pointing at the file
+- [ ] When review was not executed, the handoff says `Claude review prompt generated but Claude was not executed.` and the Result line does NOT claim approval
+- [ ] When the parsed verdict is `block`, the Result line is `Claude review verdict: block — manual review required`
+- [ ] When the parsed verdict is `request_changes`, the Result line is `Claude review verdict: request changes — manual review required`
+- [ ] When the parsed verdict is `approve` AND tests passed, the Result line says `Claude review approved and tests passed — manual approval still required`
+- [ ] When tests failed, the Result line still reports the test failure regardless of any review verdict
+
+### Safety (carried over)
+
+- [ ] No Codex CLI invocation in Phase 3
+- [ ] No auto-fix loop
+- [ ] `-AutoCommit` remains refused before any run folder is created
+- [ ] No `git commit`, `git push`, `git tag`, deploy, or dependency-install command is executed
+- [ ] The reviewer path never enables file edits or shell tools through Claude
+- [ ] Generated `claude-review-prompt.md` and `claude-review.md` are local `ai-runs/` artifacts and remain ignored by `.gitignore`
+- [ ] Phase 1 and Phase 2 smoke tests (AutoCommit refusal, DryRun, TestLevel unit) still pass without changes to detection or context-collection scripts
+
+## Out of Scope for Phase 3
 
 - Codex CLI invocation
-- Claude Code CLI review invocation
-- Auto-fix loops
+- Codex ↔ Claude fix loops
 - Auto-commit, auto-push, auto-deploy

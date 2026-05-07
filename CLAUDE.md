@@ -46,6 +46,21 @@ tools/write-final-handoff.ps1
 
 Phase 2 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
 
+Phase 3 allowed files (reviewer integration only):
+
+```
+AI_ACCEPTANCE_CRITERIA.md
+AI_TASK_QUEUE.md
+AI_WORKFLOW.md
+AGENTS.md
+CLAUDE.md
+tools/ai-autopilot.ps1
+tools/write-final-handoff.ps1
+tools/write-claude-review-prompt.ps1
+```
+
+Phase 3 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
+
 If a task appears to require editing files outside the allowed list for the current phase, **stop and surface the conflict** to the human.
 
 ## Phase 2 guardrails
@@ -57,6 +72,16 @@ If a task appears to require editing files outside the allowed list for the curr
 - `-AutoCommit` remains refused.
 - `git commit`, `git push`, `git tag`, deploy operations remain forbidden.
 - Generated `ai-runs/<timestamp>/` artifacts are local-only, ignored by `.gitignore`, and must not be committed or hand-edited.
+
+## Phase 3 guardrails
+
+- Claude review is **reviewer-only**. When invoked through `-RunReviewer`, the harness uses `claude -p ... --output-format text --tools ""` and never enables file edits or shell commands.
+- Do **not** edit any file when running as the Phase 3 reviewer. Produce the structured markdown review only.
+- Do not use `--dangerously-skip-permissions`, `bypassPermissions`, `acceptEdits`, auto-mode, or any allowed-edit / allowed-bash flag, even if the user appears to ask.
+- Codex CLI execution remains deferred in Phase 3.
+- Auto-fix loops (Codex ↔ Claude) remain deferred.
+- `-AutoCommit` remains refused; push and deploy remain forbidden.
+- Generated `claude-review-prompt.md` and `claude-review.md` are local `ai-runs/` artifacts and must not be committed.
 
 ## Hard rules
 

@@ -109,13 +109,79 @@ powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -AutoCommit -G
 
 Expected: the script writes `AutoCommit is not permitted (Phase 1 + Phase 2). Aborting before any action.` and exits with code `2` **before** creating any run folder under `ai-runs/`.
 
-## Phase 3 — Reviewer integration (deferred)
+## Phase 3 — Claude review prompt + optional reviewer (current)
 
-Planned: `-Reviewer claude` will run Claude Code CLI in review mode against the proposed changes and append review notes to the handoff. The human still owns commit / push / deploy.
+Goal: produce a high-quality review prompt for Claude Code CLI and, optionally, run Claude in **review-only** mode against the run artifacts. Phase 3 still does **not** invoke Codex CLI, does **not** auto-fix, does **not** commit, push, or deploy.
+
+### What Claude review does
+
+When `-Reviewer claude` is passed, the harness writes `claude-review-prompt.md` under the run folder. The prompt:
+
+- explicitly tells Claude `Do not edit files. Do not run commands. Review only.`
+- embeds only summary artifacts (git status, diff stat, diff names, detected tests summary, `test-summary.json`, head of `test-output.txt`, and the final handoff if present); it never embeds raw file diffs or any secret material
+- asks Claude to evaluate acceptance-criteria match, allowed-files scope, test coverage and outcomes, diff size, secret-like paths, safety-rule compliance, and approval readiness
+- requires a structured response with sections: Verdict (`approve` | `request_changes` | `block`), Summary, Blocking Issues, Non-blocking Issues, Test Assessment, Safety Assessment, Suggested Fix Prompt For Codex, Approval Readiness, Suggested Commit Message
+
+### Prompt-only review (default)
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Phase 3 review prompt smoke test"
+```
+
+The harness writes `claude-review-prompt.md` and a placeholder `claude-review.md` saying `Claude review was requested but not executed.`. The Claude CLI is NOT invoked. Hand the prompt file to Claude Code yourself, paste the response back into `claude-review.md`, then re-read the handoff.
+
+### Prompt-only review with unit tests
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -TestLevel unit -Goal "Phase 3 unit + review prompt smoke test"
+```
+
+This runs the Phase 2 unit-level test selection rules and then writes the review prompt + placeholder. Claude CLI is still not invoked.
+
+### Automatic Claude review (only after verifying local Claude CLI flags)
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -RunReviewer -TestLevel unit -Goal "Phase 3 run Claude review"
+```
+
+`-RunReviewer` is the only switch that allows the harness to spawn the Claude CLI process. The invocation is review-only and uses, in order: `-p` (print mode), `--output-format text`, and `--tools ""` to disable tool use. The harness deliberately does **not** pass `--dangerously-skip-permissions`, `--permission-mode`, `--allowedTools`, `--disallowedTools`, or any other flag that could allow file edits or bash execution. If the local Claude CLI does not accept this exact pattern, the harness writes a clear `Automatic Claude review could not be executed safely` message into `claude-review.md` and continues to the final handoff. **No alternative permissive modes are attempted.**
+
+Verify locally that your Claude CLI version accepts `claude -p ... --output-format text --tools ""` before relying on `-RunReviewer` in routine runs.
+
+### Reviewer flags summary
+
+| Flag                     | Default       | Effect                                                                                              |
+| ------------------------ | ------------- | --------------------------------------------------------------------------------------------------- |
+| `-Reviewer none`         | yes           | No Claude artifacts generated.                                                                      |
+| `-Reviewer claude`       |               | Always writes `claude-review-prompt.md`. Without `-RunReviewer`, also writes a placeholder review. |
+| `-RunReviewer`           | off           | When set together with `-Reviewer claude`, attempts the review-only Claude invocation pattern.      |
+| `-ClaudeCommand <name>`  | `claude`      | Override the executable name on PATH.                                                               |
+| `-ClaudeReviewMode`      | `prompt-only` | Reserved for future review modes; recorded in the handoff parameters block.                         |
+
+### Handoff integration
+
+`write-final-handoff.ps1` adds a `Claude Review` section listing the mode, the prompt and output paths, a status line, and the parsed verdict. The Result line is verdict-aware:
+
+- tests failed → `tests failed, manual review required` (verdict ignored)
+- verdict `block` → `Claude review verdict: block — manual review required`
+- verdict `request_changes` → `Claude review verdict: request changes — manual review required`
+- verdict `approve` + tests passed → `Claude review approved and tests passed — manual approval still required`
+- verdict `approve` + no tests run → `Claude review approved (no automated verification of tests this run) — manual approval still required`
+- otherwise → the existing Phase 2 fallbacks apply
+
+The handoff never claims approval unless the parsed `claude-review.md` actually contains a verdict line of `approve`.
+
+### Local artifacts
+
+Generated `claude-review-prompt.md` and `claude-review.md` live under `ai-runs/<timestamp>/`. They are **local-only** and remain ignored by `.gitignore`. Do not commit them.
+
+### Reusability
+
+This harness is template code. Copy `tools/`, the control documents, and `.gitignore` into any service repository. Customize `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md` for that repo. Phase 3's review prompt is generic — it asks Claude to map changes back to that repo's own `AI_ACCEPTANCE_CRITERIA.md` and `AGENTS.md` / `CLAUDE.md` allowed lists, so no Phase 3 code change is needed when reused.
 
 ## Phase 4 — Implementer integration (deferred)
 
-Planned: `-Implementer codex` will hand the task description and context bundle to Codex CLI for proposing a patch. The human still reviews and commits.
+Planned: `-Implementer codex` will hand the task description and context bundle to Codex CLI for proposing a patch. The human still reviews and commits. Phase 4 is **not** part of Phase 3.
 
 ## Non-negotiable rules
 

@@ -10,6 +10,10 @@ param(
     [string]$TestLevel = 'none',
     [ValidateSet('none','claude')]
     [string]$Reviewer = 'none',
+    [switch]$RunReviewer,
+    [string]$ClaudeCommand = 'claude',
+    [ValidateSet('prompt-only','print')]
+    [string]$ClaudeReviewMode = 'prompt-only',
     [ValidateSet('none','codex')]
     [string]$Implementer = 'none',
     [switch]$CopyHandoffToClipboard
@@ -17,11 +21,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Write-Host '=== ai-autopilot (Phase 2) ==='
+Write-Host '=== ai-autopilot (Phase 3) ==='
 
-# Hard refusal: AutoCommit is not allowed (Phase 1 + Phase 2)
+# Hard refusal: AutoCommit is not allowed (Phase 1 + Phase 2 + Phase 3)
 if ($AutoCommit) {
-    Write-Error 'AutoCommit is not permitted (Phase 1 + Phase 2). Aborting before any action.'
+    Write-Error 'AutoCommit is not permitted (Phase 1 + Phase 2 + Phase 3). Aborting before any action.'
     exit 2
 }
 
@@ -95,6 +99,9 @@ $paramLines = @(
     "SkipE2E:        $([bool]$SkipE2E)",
     "TestLevel:      $TestLevel",
     "Reviewer:       $Reviewer",
+    "RunReviewer:    $([bool]$RunReviewer)",
+    "ClaudeCommand:  $ClaudeCommand",
+    "ClaudeReviewMode: $ClaudeReviewMode",
     "Implementer:    $Implementer",
     "RepoRoot:       $repoRoot",
     "RunFolder:      $runFolder"
@@ -145,15 +152,12 @@ try {
     Write-Host "[autopilot] detect-tests.ps1 raised a non-fatal error: $($_.Exception.Message). Continuing."
 }
 
-# Phase 2 deferred notices for AI integrations
+# Deferred notices for AI integrations that are NOT yet active in Phase 3.
 if ($Implementer -eq 'codex') {
-    Write-Host '[autopilot] Implementer=codex requested. Phase 2 deferred: Codex CLI is NOT invoked.'
-}
-if ($Reviewer -eq 'claude') {
-    Write-Host '[autopilot] Reviewer=claude requested. Phase 2 deferred: Claude Code CLI is NOT invoked.'
+    Write-Host '[autopilot] Implementer=codex requested. Phase 3 deferred: Codex CLI is NOT invoked.'
 }
 if ($MaxIterations -gt 1) {
-    Write-Host "[autopilot] MaxIterations=$MaxIterations noted. Phase 2 still performs a single pass; iteration loops are deferred."
+    Write-Host "[autopilot] MaxIterations=$MaxIterations noted. Phase 3 still performs a single pass; iteration loops are deferred."
 }
 
 # -------- Phase 2: optional safe test execution --------
@@ -430,13 +434,155 @@ if ($DryRun) {
     }
 }
 
+# -------- Phase 3: Claude reviewer (prompt-only by default) --------
+# Reviewer=none      -> no Claude artifacts generated.
+# Reviewer=claude    -> always write claude-review-prompt.md.
+#                       If -RunReviewer is NOT set, write a placeholder claude-review.md.
+#                       If -RunReviewer IS set, attempt the safest review-only Claude
+#                       invocation pattern. Never enable file edits or shell tools.
+$reviewPromptPath = Join-Path $runFolder 'claude-review-prompt.md'
+$reviewOutputPath = Join-Path $runFolder 'claude-review.md'
+
+if ($Reviewer -eq 'claude') {
+    $reviewPromptScript = Join-Path $repoRoot 'tools/write-claude-review-prompt.ps1'
+    if (-not (Test-Path -LiteralPath $reviewPromptScript)) {
+        Write-Host "[autopilot] WARNING: missing tool: $reviewPromptScript. Skipping Claude review prompt generation."
+    } else {
+        try {
+            & $reviewPromptScript -RunFolder $runFolder -Goal $Goal -TaskId $TaskId -TestLevel $TestLevel -SkipE2E:$SkipE2E -DryRun:$DryRun
+        } catch {
+            Write-Host "[autopilot] WARNING: write-claude-review-prompt.ps1 threw: $($_.Exception.Message)"
+        }
+    }
+
+    if (-not $RunReviewer) {
+        $placeholder = @(
+            '# Claude Review (not executed)',
+            '',
+            'Claude review was requested but not executed. Use claude-review-prompt.md manually or rerun with -RunReviewer after verifying local Claude CLI headless flags.',
+            '',
+            "Mode: $ClaudeReviewMode",
+            'No Claude CLI process was spawned by this run.'
+        ) -join [Environment]::NewLine
+        $placeholder | Out-File -FilePath $reviewOutputPath -Encoding utf8
+        Write-Host "[autopilot] Reviewer=claude (prompt-only). Wrote $reviewPromptPath and placeholder $reviewOutputPath. Claude CLI was NOT invoked."
+    } else {
+        # Conservative review-only invocation. We pass --tools "" to disable tool use,
+        # use --output-format text, and never use any flag that allows edits or bash.
+        # If the local Claude CLI does not accept --tools "", we record a clear failure
+        # and continue to the final handoff. We do NOT attempt permissive fallbacks.
+        Write-Host "[autopilot] Reviewer=claude with -RunReviewer. Attempting review-only Claude invocation."
+        $reviewLines = @()
+        $reviewLines += '# Claude Review (auto-executed)'
+        $reviewLines += ''
+        $reviewLines += ('Invocation pattern: ' + $ClaudeCommand + ' -p <prompt> --output-format text --tools ""')
+        $reviewLines += ''
+        $cliFound = $null
+        try { $cliFound = Get-Command -Name $ClaudeCommand -ErrorAction Stop } catch { $cliFound = $null }
+
+        if ($null -eq $cliFound) {
+            $reviewLines += '## Automatic Claude review could not be executed safely'
+            $reviewLines += ''
+            $reviewLines += ("ERROR: Claude CLI not found on PATH (looked for `'" + $ClaudeCommand + "`'). No alternative permissive modes were attempted.")
+            $reviewLines += ''
+            $reviewLines += 'Use claude-review-prompt.md for manual review.'
+            ($reviewLines -join [Environment]::NewLine) | Out-File -FilePath $reviewOutputPath -Encoding utf8
+            Write-Host "[autopilot] Claude CLI not found. Wrote unsupported-notice $reviewOutputPath."
+        } elseif (-not (Test-Path -LiteralPath $reviewPromptPath)) {
+            $reviewLines += '## Automatic Claude review could not be executed safely'
+            $reviewLines += ''
+            $reviewLines += 'ERROR: claude-review-prompt.md was not generated, so no prompt is available to send to Claude.'
+            $reviewLines += ''
+            $reviewLines += 'Inspect earlier console warnings from write-claude-review-prompt.ps1.'
+            ($reviewLines -join [Environment]::NewLine) | Out-File -FilePath $reviewOutputPath -Encoding utf8
+            Write-Host "[autopilot] No review prompt available. Wrote unsupported-notice $reviewOutputPath."
+        } else {
+            $promptText = Get-Content -LiteralPath $reviewPromptPath -Raw -ErrorAction SilentlyContinue
+            if ([string]::IsNullOrWhiteSpace($promptText)) { $promptText = '(empty review prompt)' }
+
+            $tempErrFile = Join-Path ([System.IO.Path]::GetTempPath()) ("claude-review-err-" + [System.Guid]::NewGuid().ToString() + ".txt")
+            $stdoutText = $null
+            $exit       = -1
+            $threw      = $null
+            try {
+                # Pipe prompt via stdin to avoid command-line length / quoting issues.
+                # Flags: -p (print mode), --output-format text, --tools "" (no tools).
+                # We deliberately do NOT pass --dangerously-skip-permissions, --permission-mode,
+                # --allowedTools, --disallowedTools, or any flag that could allow edits/bash.
+                $stdoutText = $promptText | & $ClaudeCommand -p --output-format text --tools "" 2>$tempErrFile
+                $exit = $LASTEXITCODE
+            } catch {
+                $threw = $_.Exception.Message
+            }
+            $stderrText = ''
+            if (Test-Path -LiteralPath $tempErrFile) {
+                try { $stderrText = Get-Content -LiteralPath $tempErrFile -Raw -ErrorAction SilentlyContinue } catch { $stderrText = '' }
+                Remove-Item -LiteralPath $tempErrFile -Force -ErrorAction SilentlyContinue
+            }
+
+            $stdoutCombined = if ($null -eq $stdoutText) { '' } elseif ($stdoutText -is [string]) { $stdoutText } else { ($stdoutText | Out-String) }
+            $stdoutCombined = ($stdoutCombined).TrimEnd()
+            $stderrText     = if ($null -eq $stderrText) { '' } else { ([string]$stderrText).TrimEnd() }
+
+            $reviewLines += ("Exit code: " + $exit)
+            if ($null -ne $threw) {
+                $reviewLines += ("Invocation threw: " + $threw)
+            }
+            $reviewLines += ''
+
+            $bt2    = [char]96
+            $fence2 = '' + $bt2 + $bt2 + $bt2
+
+            if ($null -ne $threw -or $exit -ne 0 -or [string]::IsNullOrWhiteSpace($stdoutCombined)) {
+                $reviewLines += '## Automatic Claude review could not be executed safely'
+                $reviewLines += ''
+                $reviewLines += 'The local Claude CLI did not return a usable review with the safest review-only invocation pattern. No alternative permissive modes were attempted.'
+                $reviewLines += ''
+                $reviewLines += 'Use claude-review-prompt.md for manual review.'
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $reviewLines += ''
+                    $reviewLines += '### CLI stderr'
+                    $reviewLines += ''
+                    $reviewLines += $fence2
+                    $reviewLines += $stderrText
+                    $reviewLines += $fence2
+                }
+                if (-not [string]::IsNullOrWhiteSpace($stdoutCombined)) {
+                    $reviewLines += ''
+                    $reviewLines += '### CLI stdout'
+                    $reviewLines += ''
+                    $reviewLines += $fence2
+                    $reviewLines += $stdoutCombined
+                    $reviewLines += $fence2
+                }
+                ($reviewLines -join [Environment]::NewLine) | Out-File -FilePath $reviewOutputPath -Encoding utf8
+                Write-Host "[autopilot] Claude review unsupported or failed. Wrote $reviewOutputPath."
+            } else {
+                $reviewLines += '## Claude review output'
+                $reviewLines += ''
+                $reviewLines += $stdoutCombined
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $reviewLines += ''
+                    $reviewLines += '## CLI stderr (informational)'
+                    $reviewLines += ''
+                    $reviewLines += $fence2
+                    $reviewLines += $stderrText
+                    $reviewLines += $fence2
+                }
+                ($reviewLines -join [Environment]::NewLine) | Out-File -FilePath $reviewOutputPath -Encoding utf8
+                Write-Host "[autopilot] Claude review captured. Wrote $reviewOutputPath."
+            }
+        }
+    }
+}
+
 # Step: write final handoff
 $handoffScript = Join-Path $repoRoot 'tools/write-final-handoff.ps1'
 if (-not (Test-Path -LiteralPath $handoffScript)) {
     Write-Error "Missing tool: $handoffScript"
     exit 2
 }
-& $handoffScript -RunFolder $runFolder -Goal $Goal -TaskId $TaskId -TestLevel $TestLevel -SkipE2E:$SkipE2E -DryRun:$DryRun
+& $handoffScript -RunFolder $runFolder -Goal $Goal -TaskId $TaskId -TestLevel $TestLevel -SkipE2E:$SkipE2E -DryRun:$DryRun -Reviewer $Reviewer -RunReviewer:$RunReviewer -ClaudeReviewMode $ClaudeReviewMode
 
 # Optional: copy handoff to clipboard
 if ($CopyHandoffToClipboard) {
@@ -454,7 +600,14 @@ if ($CopyHandoffToClipboard) {
 Write-Host ''
 Write-Host '=================================================='
 Write-Host '  NO commit, NO push, NO deploy was performed.'
-Write-Host '  No dependencies installed. No Codex/Claude invoked.'
+Write-Host '  No dependencies installed. Codex CLI NOT invoked.'
+if ($Reviewer -eq 'claude' -and $RunReviewer) {
+    Write-Host '  Claude CLI was invoked in review-only mode (no edits, no bash).'
+} elseif ($Reviewer -eq 'claude') {
+    Write-Host '  Claude review prompt generated; Claude CLI NOT invoked.'
+} else {
+    Write-Host '  Reviewer disabled (Reviewer=none). Claude CLI NOT invoked.'
+}
 Write-Host '  Human review required before any further action.'
 Write-Host '=================================================='
 
