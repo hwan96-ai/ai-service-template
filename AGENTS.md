@@ -22,7 +22,32 @@ tools/write-final-handoff.ps1
 ai-runs/.gitkeep
 ```
 
-If a task appears to require modifying a file outside this list, **stop and report**. Do not silently expand scope.
+## Phase 2 allowed files
+
+```
+AI_ACCEPTANCE_CRITERIA.md
+AI_TASK_QUEUE.md
+AI_WORKFLOW.md
+AGENTS.md
+CLAUDE.md
+tools/ai-autopilot.ps1
+tools/detect-tests.ps1
+tools/write-final-handoff.ps1
+```
+
+Phase 2 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
+
+If a task appears to require modifying a file outside the allowed list for the current phase, **stop and report**. Do not silently expand scope.
+
+## Phase 2 guardrails
+
+- Codex CLI execution remains deferred. Do not invoke `codex`.
+- Claude Code CLI execution remains deferred. Do not invoke `claude`.
+- Test execution is local and **optional**, gated through `-TestLevel` and `-SkipE2E` on `ai-autopilot.ps1`. The default `-TestLevel none` must never be silently changed.
+- Auto-fix loops remain forbidden.
+- `-AutoCommit` remains refused.
+- `git commit`, `git push`, `git tag`, deploy operations remain forbidden.
+- Generated `ai-runs/<timestamp>/` artifacts are local-only, ignored by `.gitignore`, and must not be committed or hand-edited.
 
 ## Hard rules
 

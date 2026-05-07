@@ -4,10 +4,15 @@ param(
     [string]$RunFolder
 )
 
-$ErrorActionPreference = 'Stop'
+# Use Continue (not Stop) so harmless native git stderr noise (e.g. LF/CRLF
+# warnings emitted by core.autocrlf) cannot abort the script. We invoke git
+# through cmd.exe and redirect stderr to NUL at the cmd level so PowerShell
+# never wraps native stderr lines into terminating ErrorRecords.
+$ErrorActionPreference = 'Continue'
 
 if (-not (Test-Path -LiteralPath $RunFolder)) {
-    throw "collect-context: run folder does not exist: $RunFolder"
+    Write-Error "collect-context: run folder does not exist: $RunFolder"
+    exit 2
 }
 
 $secretPatterns = @(
@@ -27,42 +32,63 @@ function Test-IsSecretLike {
     return $false
 }
 
-# git status --short
-$statusOut = git status --short 2>&1
+function Invoke-GitStdoutOnly {
+    # Run a git invocation through cmd.exe so its stderr is dropped at the
+    # cmd-level redirection (2>NUL) and PowerShell only ever sees stdout.
+    # Returns an array of stdout lines (possibly empty). $LASTEXITCODE is
+    # set to git's exit code.
+    param([Parameter(Mandatory)][string]$GitArgs)
+    $cmdLine = "git $GitArgs 2>NUL"
+    $output = cmd.exe /c $cmdLine
+    if ($null -eq $output) { return @() }
+    return @($output)
+}
+
+function Write-FilteredLines {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Lines,
+        [switch]$FilterSecrets
+    )
+    $out = @()
+    foreach ($line in $Lines) {
+        $text = [string]$line
+        if ($FilterSecrets -and (Test-IsSecretLike $text)) {
+            $out += '[redacted secret-like path]'
+        } else {
+            $out += $text
+        }
+    }
+    if ($out.Count -eq 0) {
+        # Always write at least an empty file so downstream tooling can rely on its presence.
+        Set-Content -LiteralPath $Path -Value '' -Encoding utf8
+    } else {
+        ($out -join [Environment]::NewLine) | Out-File -FilePath $Path -Encoding utf8
+    }
+}
+
+# git status --short (stdout only; secret-like paths redacted)
 $statusPath = Join-Path $RunFolder 'git-status.txt'
-$statusFiltered = @()
-foreach ($line in @($statusOut)) {
-    $text = [string]$line
-    if (Test-IsSecretLike $text) {
-        $statusFiltered += '[redacted secret-like path]'
-    } else {
-        $statusFiltered += $text
-    }
-}
-($statusFiltered -join [Environment]::NewLine) | Out-File -FilePath $statusPath -Encoding utf8
+$statusOut  = Invoke-GitStdoutOnly -GitArgs 'status --short'
+$statusExit = $LASTEXITCODE
+Write-FilteredLines -Path $statusPath -Lines $statusOut -FilterSecrets
 
-# git diff --stat
-$diffStatOut = git diff --stat 2>&1
+# git diff --stat (stdout only; no path filtering needed — stat lines include line counts, not contents)
 $diffStatPath = Join-Path $RunFolder 'git-diff-stat.txt'
-($diffStatOut -join [Environment]::NewLine) | Out-File -FilePath $diffStatPath -Encoding utf8
+$diffStatOut  = Invoke-GitStdoutOnly -GitArgs 'diff --stat'
+$diffStatExit = $LASTEXITCODE
+Write-FilteredLines -Path $diffStatPath -Lines $diffStatOut
 
-# git diff --name-only (filter secret-like paths)
-$diffNamesOut = git diff --name-only 2>&1
+# git diff --name-only (stdout only; secret-like paths redacted)
 $diffNamesPath = Join-Path $RunFolder 'git-diff-names.txt'
-$namesFiltered = @()
-foreach ($line in @($diffNamesOut)) {
-    $text = [string]$line
-    if (Test-IsSecretLike $text) {
-        $namesFiltered += '[redacted secret-like path]'
-    } else {
-        $namesFiltered += $text
-    }
-}
-($namesFiltered -join [Environment]::NewLine) | Out-File -FilePath $diffNamesPath -Encoding utf8
+$diffNamesOut  = Invoke-GitStdoutOnly -GitArgs 'diff --name-only'
+$diffNamesExit = $LASTEXITCODE
+Write-FilteredLines -Path $diffNamesPath -Lines $diffNamesOut -FilterSecrets
 
-$statusCount = @($statusFiltered | Where-Object { $_ -ne '' }).Count
-$nameCount   = @($namesFiltered | Where-Object { $_ -ne '' }).Count
+$statusCount = @($statusOut    | Where-Object { -not [string]::IsNullOrEmpty([string]$_) }).Count
+$nameCount   = @($diffNamesOut | Where-Object { -not [string]::IsNullOrEmpty([string]$_) }).Count
 
-Write-Host "[collect-context] git-status entries: $statusCount"
-Write-Host "[collect-context] git-diff names: $nameCount (secret-like paths redacted)"
+Write-Host ("[collect-context] git-status entries: {0} (exit={1})" -f $statusCount, $statusExit)
+Write-Host ("[collect-context] git-diff names: {0} (exit={1}, secret-like paths redacted)" -f $nameCount, $diffNamesExit)
+Write-Host ("[collect-context] git-diff stat exit: {0}" -f $diffStatExit)
 Write-Host "[collect-context] artifacts written under $RunFolder"
