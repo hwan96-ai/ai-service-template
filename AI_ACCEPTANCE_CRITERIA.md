@@ -132,3 +132,54 @@ The harness is "done" for Phase 3 when ALL of the following are true.
 - Codex CLI invocation
 - Codex ↔ Claude fix loops
 - Auto-commit, auto-push, auto-deploy
+
+## Phase 4 — Codex one-shot implementation support
+
+The harness is "done" for Phase 4 when ALL of the following are true.
+
+### Codex prompt generation
+
+- [ ] `tools/write-codex-implementation-prompt.ps1` exists and is invoked when `-Implementer codex` is passed.
+- [ ] Running `ai-autopilot.ps1 -Implementer codex` creates `codex-implementation-prompt.md` under the run folder.
+- [ ] `codex-implementation-prompt.md` instructs Codex to act as implementer only, make the smallest safe change for the current Goal or TaskId, follow `AGENTS.md` / `AI_ACCEPTANCE_CRITERIA.md` / `AI_TASK_QUEUE.md` / `AI_WORKFLOW.md`, and stop and report on ambiguity.
+- [ ] The prompt forbids commit, push, deploy, dependency installation, broad refactors, secret access, files outside the task scope, and any permissive sandbox flag (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass).
+- [ ] The prompt requests a final structured response with sections: Summary, Files Changed, Tests Run Or Not Run, Risks, Follow-up Needed.
+- [ ] The prompt embeds only summary artifacts (`git-status.txt`, `git-diff-stat.txt`, `git-diff-names.txt`, `detected-tests.md`, `test-summary.json`, optional `AI_FINAL_HANDOFF.md`, heads of the control documents) and NEVER raw file diffs, full source contents, or secret material.
+
+### Codex execution
+
+- [ ] Without `-RunImplementer`, the harness does NOT spawn the Codex CLI process.
+- [ ] Without `-RunImplementer`, `codex-output.md` contains the placeholder `Codex implementation was requested but not executed.` and points the human at `codex-implementation-prompt.md`.
+- [ ] `-DryRun` never invokes Codex even if `-RunImplementer` is also set; `codex-output.md` records the suppression.
+- [ ] With `-RunImplementer` (and `-DryRun` off), the harness attempts a single `codex exec --sandbox workspace-write` invocation and never retries on failure.
+- [ ] The Codex invocation never uses `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass, or any other permissive sandbox / approval flag.
+- [ ] Codex stdout, stderr, and exit code are captured into `codex-output.md`.
+- [ ] If the local Codex CLI is missing or the safe invocation fails, `codex-output.md` clearly says automatic Codex implementation could not be executed safely and the harness still finishes the final handoff. No alternative permissive Codex modes are attempted.
+- [ ] After a Codex execution attempt (success or failure), the harness re-runs `tools/collect-context.ps1` so post-Codex git status / diff artifacts are present for review.
+- [ ] Tests still run after the Codex attempt according to `-TestLevel` and `-SkipE2E`.
+
+### Handoff integration
+
+- [ ] `write-final-handoff.ps1` adds a `## Codex Implementer` section listing Mode, Prompt path, Output path, Status, and Exit code.
+- [ ] Codex Status is one of `not requested`, `prompt generated but Codex CLI was not executed`, `Codex CLI was executed once in workspace-write sandbox`, or `Automatic Codex implementation failed or was unsupported`.
+- [ ] When `-RunImplementer` was not set, the Result line says `manual review required (Codex prompt generated but not executed)`.
+- [ ] When Codex was executed via `-RunImplementer` but failed/unsupported, the Result line says `Codex implementation failed or was not executed safely — manual review required`.
+- [ ] When tests failed, the Result line still reports the test failure regardless of Codex status.
+- [ ] When Codex ran, tests passed, and Claude verdict is `approve`, the Result line says `Codex ran, tests passed, Claude review approved — manual approval still required`.
+- [ ] When Codex ran but no automated verification was available (`TestLevel=none`, `noCommandsSelected`, `noTestsFound`, or `DryRun`), the Result line still flags the lack of automated verification.
+
+### Safety (carried over)
+
+- [ ] `-AutoCommit` remains refused before any run folder is created.
+- [ ] No `git commit`, `git push`, `git tag`, deploy, or dependency-install command is executed by the harness.
+- [ ] No Codex ↔ Claude fix loop is implemented.
+- [ ] No automatic retry loop is implemented.
+- [ ] Generated `codex-implementation-prompt.md` and `codex-output.md` are local `ai-runs/` artifacts and remain ignored by `.gitignore`.
+- [ ] Phase 1, Phase 2, and Phase 3 smoke tests (AutoCommit refusal, DryRun, TestLevel unit, Reviewer claude DryRun) still pass without changes to detection or context-collection scripts.
+
+## Out of Scope for Phase 4
+
+- Codex ↔ Claude fix loops
+- Automatic retry loops
+- Auto-commit, auto-push, auto-deploy
+- Permissive Codex sandbox modes (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)

@@ -16,16 +16,21 @@ param(
     [string]$ClaudeReviewMode = 'prompt-only',
     [ValidateSet('none','codex')]
     [string]$Implementer = 'none',
+    [switch]$RunImplementer,
+    [string]$CodexCommand = 'codex',
+    [string]$CodexSandbox = 'workspace-write',
+    [ValidateSet('prompt-only','exec')]
+    [string]$CodexRunMode = 'prompt-only',
     [switch]$CopyHandoffToClipboard
 )
 
 $ErrorActionPreference = 'Stop'
 
-Write-Host '=== ai-autopilot (Phase 3) ==='
+Write-Host '=== ai-autopilot (Phase 4) ==='
 
-# Hard refusal: AutoCommit is not allowed (Phase 1 + Phase 2 + Phase 3)
+# Hard refusal: AutoCommit is not allowed (Phase 1 + Phase 2 + Phase 3 + Phase 4)
 if ($AutoCommit) {
-    Write-Error 'AutoCommit is not permitted (Phase 1 + Phase 2 + Phase 3). Aborting before any action.'
+    Write-Error 'AutoCommit is not permitted (Phase 1 + Phase 2 + Phase 3 + Phase 4). Aborting before any action.'
     exit 2
 }
 
@@ -84,8 +89,8 @@ Write-Host "[autopilot] Repo root:  $repoRoot"
 Write-Host "[autopilot] Run folder: $runFolder"
 
 if ($DryRun) {
-    Write-Host '[autopilot] DryRun is ON. Suppressed: Codex, Claude, tests, install, commit, push, deploy, destructive ops.'
-    Write-Host '[autopilot] DryRun still writes safe local report files (goal.txt, git-*.txt, detected-tests.*, test-*, AI_FINAL_HANDOFF.md).'
+    Write-Host '[autopilot] DryRun is ON. Suppressed: Codex execution, Claude execution, tests, install, commit, push, deploy, destructive ops.'
+    Write-Host '[autopilot] DryRun still writes safe local report files (goal.txt, git-*.txt, detected-tests.*, test-*, codex prompt + placeholder, claude prompt + placeholder, AI_FINAL_HANDOFF.md).'
 }
 
 # Save run parameters
@@ -103,6 +108,10 @@ $paramLines = @(
     "ClaudeCommand:  $ClaudeCommand",
     "ClaudeReviewMode: $ClaudeReviewMode",
     "Implementer:    $Implementer",
+    "RunImplementer: $([bool]$RunImplementer)",
+    "CodexCommand:   $CodexCommand",
+    "CodexSandbox:   $CodexSandbox",
+    "CodexRunMode:   $CodexRunMode",
     "RepoRoot:       $repoRoot",
     "RunFolder:      $runFolder"
 )
@@ -152,12 +161,218 @@ try {
     Write-Host "[autopilot] detect-tests.ps1 raised a non-fatal error: $($_.Exception.Message). Continuing."
 }
 
-# Deferred notices for AI integrations that are NOT yet active in Phase 3.
-if ($Implementer -eq 'codex') {
-    Write-Host '[autopilot] Implementer=codex requested. Phase 3 deferred: Codex CLI is NOT invoked.'
-}
 if ($MaxIterations -gt 1) {
-    Write-Host "[autopilot] MaxIterations=$MaxIterations noted. Phase 3 still performs a single pass; iteration loops are deferred."
+    Write-Host "[autopilot] MaxIterations=$MaxIterations noted. Phase 4 still performs a single pass; iteration loops are deferred."
+}
+
+# -------- Phase 4: Codex one-shot implementer (prompt-only by default) --------
+# Implementer=none   -> no Codex artifacts generated.
+# Implementer=codex  -> always write codex-implementation-prompt.md.
+#                       If -RunImplementer is NOT set, write a placeholder
+#                       codex-output.md and never spawn the Codex CLI.
+#                       If -RunImplementer IS set AND DryRun is OFF, attempt
+#                       a single conservative `codex exec --sandbox workspace-write`
+#                       invocation. Capture stdout/stderr/exit code into
+#                       codex-output.md. No retries. No permissive fallbacks.
+#                       Never use danger-full-access / yolo / full-auto / bypass flags.
+$codexPromptPath = Join-Path $runFolder 'codex-implementation-prompt.md'
+$codexOutputPath = Join-Path $runFolder 'codex-output.md'
+$codexExecuted   = $false
+$codexExitCode   = $null
+$codexStatus     = 'not-requested'
+
+if ($Implementer -eq 'codex') {
+    $codexPromptScript = Join-Path $repoRoot 'tools/write-codex-implementation-prompt.ps1'
+    if (-not (Test-Path -LiteralPath $codexPromptScript)) {
+        Write-Host "[autopilot] WARNING: missing tool: $codexPromptScript. Skipping Codex prompt generation."
+    } else {
+        try {
+            & $codexPromptScript -RunFolder $runFolder -Goal $Goal -TaskId $TaskId -TestLevel $TestLevel -SkipE2E:$SkipE2E -DryRun:$DryRun
+        } catch {
+            Write-Host "[autopilot] WARNING: write-codex-implementation-prompt.ps1 threw: $($_.Exception.Message)"
+        }
+    }
+
+    if (-not $RunImplementer) {
+        $codexStatus = 'prompt-generated-not-executed'
+        $placeholder = @(
+            '# Codex Implementation (not executed)',
+            '',
+            'Codex implementation was requested but not executed. Use codex-implementation-prompt.md manually or rerun with -RunImplementer after verifying local Codex CLI flags.',
+            '',
+            "Implementer:  $Implementer",
+            "CodexCommand: $CodexCommand",
+            "CodexSandbox: $CodexSandbox",
+            "CodexRunMode: $CodexRunMode",
+            'No Codex CLI process was spawned by this run.'
+        ) -join [Environment]::NewLine
+        $placeholder | Out-File -FilePath $codexOutputPath -Encoding utf8
+        Write-Host "[autopilot] Implementer=codex (prompt-only). Wrote $codexPromptPath and placeholder $codexOutputPath. Codex CLI was NOT invoked."
+
+    } elseif ($DryRun) {
+        $codexStatus = 'prompt-generated-not-executed'
+        $placeholder = @(
+            '# Codex Implementation (not executed - DryRun)',
+            '',
+            '-DryRun is ON, so the harness refused to invoke Codex CLI even though -RunImplementer was specified.',
+            'Use codex-implementation-prompt.md manually or rerun without -DryRun after verifying local Codex CLI flags.',
+            '',
+            "Implementer:  $Implementer",
+            "CodexCommand: $CodexCommand",
+            "CodexSandbox: $CodexSandbox",
+            "CodexRunMode: $CodexRunMode",
+            'No Codex CLI process was spawned by this run.'
+        ) -join [Environment]::NewLine
+        $placeholder | Out-File -FilePath $codexOutputPath -Encoding utf8
+        Write-Host "[autopilot] Implementer=codex with -RunImplementer but -DryRun is ON. Codex CLI was NOT invoked."
+
+    } else {
+        # One-shot conservative Codex invocation. Sandbox is locked to
+        # workspace-write. We never pass danger-full-access, --full-auto,
+        # --dangerously-bypass-approvals-and-sandbox, yolo, or any other
+        # permissive flag. We never retry on failure. If the safe pattern
+        # fails we record the failure and continue to the final handoff.
+        Write-Host "[autopilot] Implementer=codex with -RunImplementer. Attempting one-shot codex exec (--sandbox $CodexSandbox)."
+
+        $codexLines = @()
+        $codexLines += '# Codex Implementation (auto-executed)'
+        $codexLines += ''
+        $codexLines += ('Invocation pattern: ' + $CodexCommand + ' exec --sandbox ' + $CodexSandbox + ' <prompt>')
+        $codexLines += ''
+        $codexLines += "Implementer:  $Implementer"
+        $codexLines += "CodexCommand: $CodexCommand"
+        $codexLines += "CodexSandbox: $CodexSandbox"
+        $codexLines += "CodexRunMode: $CodexRunMode"
+        $codexLines += ''
+
+        $cliFound = $null
+        try { $cliFound = Get-Command -Name $CodexCommand -ErrorAction Stop } catch { $cliFound = $null }
+
+        $bt2    = [char]96
+        $fence2 = '' + $bt2 + $bt2 + $bt2
+
+        if ($null -eq $cliFound) {
+            $codexStatus = 'failed-or-unsupported'
+            $codexLines += '## Automatic Codex implementation could not be executed safely'
+            $codexLines += ''
+            $codexLines += ("ERROR: Codex CLI not found on PATH (looked for `'" + $CodexCommand + "`'). No alternative permissive modes were attempted.")
+            $codexLines += ''
+            $codexLines += 'Use codex-implementation-prompt.md for manual implementation.'
+            ($codexLines -join [Environment]::NewLine) | Out-File -FilePath $codexOutputPath -Encoding utf8
+            Write-Host "[autopilot] Codex CLI not found. Wrote unsupported-notice $codexOutputPath."
+
+        } elseif (-not (Test-Path -LiteralPath $codexPromptPath)) {
+            $codexStatus = 'failed-or-unsupported'
+            $codexLines += '## Automatic Codex implementation could not be executed safely'
+            $codexLines += ''
+            $codexLines += 'ERROR: codex-implementation-prompt.md was not generated, so no prompt is available to send to Codex.'
+            $codexLines += ''
+            $codexLines += 'Inspect earlier console warnings from write-codex-implementation-prompt.ps1.'
+            ($codexLines -join [Environment]::NewLine) | Out-File -FilePath $codexOutputPath -Encoding utf8
+            Write-Host "[autopilot] No Codex prompt available. Wrote unsupported-notice $codexOutputPath."
+
+        } else {
+            $promptText = Get-Content -LiteralPath $codexPromptPath -Raw -ErrorAction SilentlyContinue
+            if ([string]::IsNullOrWhiteSpace($promptText)) { $promptText = '(empty Codex prompt)' }
+
+            $tempErrFile = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-exec-err-" + [System.Guid]::NewGuid().ToString() + ".txt")
+            $stdoutText = $null
+            $exit       = -1
+            $threw      = $null
+            $invocation = '(unknown)'
+
+            # Primary attempt: pass prompt as a positional argument to
+            # `codex exec --sandbox <sandbox>`. This is the documented
+            # non-interactive shape and avoids stdin-quoting concerns on
+            # PowerShell. If this fails, we record the failure and stop.
+            # We do NOT escalate to permissive sandboxes or bypass flags.
+            try {
+                $invocation = "$CodexCommand exec --sandbox $CodexSandbox <prompt-as-arg>"
+                $stdoutText = & $CodexCommand exec --sandbox $CodexSandbox $promptText 2>$tempErrFile
+                $exit = $LASTEXITCODE
+            } catch {
+                $threw = $_.Exception.Message
+            }
+
+            $stderrText = ''
+            if (Test-Path -LiteralPath $tempErrFile) {
+                try { $stderrText = Get-Content -LiteralPath $tempErrFile -Raw -ErrorAction SilentlyContinue } catch { $stderrText = '' }
+                Remove-Item -LiteralPath $tempErrFile -Force -ErrorAction SilentlyContinue
+            }
+
+            $stdoutCombined = if ($null -eq $stdoutText) { '' } elseif ($stdoutText -is [string]) { $stdoutText } else { ($stdoutText | Out-String) }
+            $stdoutCombined = ($stdoutCombined).TrimEnd()
+            $stderrText     = if ($null -eq $stderrText) { '' } else { ([string]$stderrText).TrimEnd() }
+
+            $codexLines += ('Invocation: ' + $invocation)
+            $codexLines += ('Exit code: ' + $exit)
+            if ($null -ne $threw) {
+                $codexLines += ('Invocation threw: ' + $threw)
+            }
+            $codexLines += ''
+
+            $codexExitCode = $exit
+
+            if ($null -ne $threw -or $exit -ne 0) {
+                $codexStatus = 'failed-or-unsupported'
+                $codexLines += '## Automatic Codex implementation failed'
+                $codexLines += ''
+                $codexLines += 'The local Codex CLI did not complete successfully with the safe `codex exec --sandbox workspace-write` invocation. No alternative permissive modes were attempted.'
+                $codexLines += ''
+                $codexLines += 'Use codex-implementation-prompt.md for manual implementation.'
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $codexLines += ''
+                    $codexLines += '### CLI stderr'
+                    $codexLines += ''
+                    $codexLines += $fence2
+                    $codexLines += $stderrText
+                    $codexLines += $fence2
+                }
+                if (-not [string]::IsNullOrWhiteSpace($stdoutCombined)) {
+                    $codexLines += ''
+                    $codexLines += '### CLI stdout'
+                    $codexLines += ''
+                    $codexLines += $fence2
+                    $codexLines += $stdoutCombined
+                    $codexLines += $fence2
+                }
+                ($codexLines -join [Environment]::NewLine) | Out-File -FilePath $codexOutputPath -Encoding utf8
+                Write-Host "[autopilot] Codex implementation failed (exit=$exit). Wrote $codexOutputPath."
+            } else {
+                $codexStatus  = 'executed'
+                $codexExecuted = $true
+                $codexLines += '## Codex execution output'
+                $codexLines += ''
+                if (-not [string]::IsNullOrWhiteSpace($stdoutCombined)) {
+                    $codexLines += $fence2
+                    $codexLines += $stdoutCombined
+                    $codexLines += $fence2
+                } else {
+                    $codexLines += '(Codex returned no stdout content.)'
+                }
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $codexLines += ''
+                    $codexLines += '## CLI stderr (informational)'
+                    $codexLines += ''
+                    $codexLines += $fence2
+                    $codexLines += $stderrText
+                    $codexLines += $fence2
+                }
+                ($codexLines -join [Environment]::NewLine) | Out-File -FilePath $codexOutputPath -Encoding utf8
+                Write-Host "[autopilot] Codex execution captured. Wrote $codexOutputPath."
+            }
+        }
+
+        # Refresh git context so the handoff reflects post-Codex state,
+        # regardless of whether Codex succeeded or failed. This runs even
+        # for the unsupported / failed branches so the human reviewer can
+        # see whether anything was modified.
+        try {
+            & $collectScript -RunFolder $runFolder
+        } catch {
+            Write-Host "[autopilot] WARNING: post-Codex collect-context.ps1 threw: $($_.Exception.Message)"
+        }
+    }
 }
 
 # -------- Phase 2: optional safe test execution --------
@@ -582,7 +797,7 @@ if (-not (Test-Path -LiteralPath $handoffScript)) {
     Write-Error "Missing tool: $handoffScript"
     exit 2
 }
-& $handoffScript -RunFolder $runFolder -Goal $Goal -TaskId $TaskId -TestLevel $TestLevel -SkipE2E:$SkipE2E -DryRun:$DryRun -Reviewer $Reviewer -RunReviewer:$RunReviewer -ClaudeReviewMode $ClaudeReviewMode
+& $handoffScript -RunFolder $runFolder -Goal $Goal -TaskId $TaskId -TestLevel $TestLevel -SkipE2E:$SkipE2E -DryRun:$DryRun -Reviewer $Reviewer -RunReviewer:$RunReviewer -ClaudeReviewMode $ClaudeReviewMode -Implementer $Implementer -RunImplementer:$RunImplementer -CodexCommand $CodexCommand -CodexSandbox $CodexSandbox -CodexRunMode $CodexRunMode
 
 # Optional: copy handoff to clipboard
 if ($CopyHandoffToClipboard) {
@@ -600,7 +815,18 @@ if ($CopyHandoffToClipboard) {
 Write-Host ''
 Write-Host '=================================================='
 Write-Host '  NO commit, NO push, NO deploy was performed.'
-Write-Host '  No dependencies installed. Codex CLI NOT invoked.'
+Write-Host '  No dependencies installed.'
+if ($Implementer -eq 'codex' -and $codexExecuted) {
+    Write-Host '  Codex CLI was invoked once in workspace-write sandbox.'
+} elseif ($Implementer -eq 'codex' -and $RunImplementer -and $DryRun) {
+    Write-Host '  Codex prompt generated; -RunImplementer suppressed by -DryRun.'
+} elseif ($Implementer -eq 'codex' -and $RunImplementer) {
+    Write-Host '  Codex one-shot attempt failed or was unsupported; see codex-output.md.'
+} elseif ($Implementer -eq 'codex') {
+    Write-Host '  Codex prompt generated; Codex CLI NOT invoked.'
+} else {
+    Write-Host '  Implementer disabled (Implementer=none). Codex CLI NOT invoked.'
+}
 if ($Reviewer -eq 'claude' -and $RunReviewer) {
     Write-Host '  Claude CLI was invoked in review-only mode (no edits, no bash).'
 } elseif ($Reviewer -eq 'claude') {

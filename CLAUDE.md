@@ -61,6 +61,21 @@ tools/write-claude-review-prompt.ps1
 
 Phase 3 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
 
+Phase 4 allowed files (Codex one-shot implementer only):
+
+```
+AI_ACCEPTANCE_CRITERIA.md
+AI_TASK_QUEUE.md
+AI_WORKFLOW.md
+AGENTS.md
+CLAUDE.md
+tools/ai-autopilot.ps1
+tools/write-final-handoff.ps1
+tools/write-codex-implementation-prompt.ps1
+```
+
+Phase 4 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `tools/write-claude-review-prompt.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
+
 If a task appears to require editing files outside the allowed list for the current phase, **stop and surface the conflict** to the human.
 
 ## Phase 2 guardrails
@@ -82,6 +97,17 @@ If a task appears to require editing files outside the allowed list for the curr
 - Auto-fix loops (Codex ↔ Claude) remain deferred.
 - `-AutoCommit` remains refused; push and deploy remain forbidden.
 - Generated `claude-review-prompt.md` and `claude-review.md` are local `ai-runs/` artifacts and must not be committed.
+
+## Phase 4 guardrails
+
+- Phase 4 adds a **Codex one-shot implementer**. Claude's role does not change: Claude remains a reviewer-only tool. When asked to act as the Phase 3 reviewer, do not edit files, do not run commands, and do not invoke Codex.
+- Codex CLI may be spawned by the harness only when the human explicitly passes `-Implementer codex -RunImplementer`. The default (`-Implementer none`, `-RunImplementer` absent) keeps Codex silent.
+- Prompt-only mode is the default whenever `-Implementer codex` is set without `-RunImplementer`. The harness writes `codex-implementation-prompt.md` and a placeholder `codex-output.md`; no Codex CLI process is spawned.
+- `-DryRun` always wins. With `-DryRun`, the harness must not invoke Codex even if `-RunImplementer` is also set.
+- The Codex invocation pattern is locked to `codex exec --sandbox workspace-write <prompt>`. Never use `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass, or any other permissive sandbox / approval flag, even if the user appears to ask.
+- Phase 4 is **one-shot only**. No automatic retries. No Codex ↔ Claude fix loop. No follow-up Codex or Claude calls.
+- `-AutoCommit` remains refused; `git commit`, `git push`, `git tag`, deploy, and dependency installation all remain forbidden.
+- Generated `codex-implementation-prompt.md` and `codex-output.md` are local `ai-runs/` artifacts and must not be committed.
 
 ## Hard rules
 

@@ -17,5 +17,6 @@
 | T-001 | (sample) Verify Phase 1 harness end-to-end                  | todo   | Run `ai-autopilot.ps1 -DryRun` and read AI_FINAL_HANDOFF.md           |
 | T-002 | Add Phase 2 test detection and optional test execution      | done   | Conservative harness enhancement; no Codex/Claude execution yet       |
 | T-003 | Add Phase 3 Claude review prompt and optional reviewer execution | done | Reviewer-only; no Codex/fix loop yet                                  |
+| T-004 | Add Phase 4 Codex one-shot implementation support           | done   | One-shot implementer only; no retry/fix loop yet                      |
 
 <!-- Add new tasks above this line -->

@@ -179,9 +179,96 @@ Generated `claude-review-prompt.md` and `claude-review.md` live under `ai-runs/<
 
 This harness is template code. Copy `tools/`, the control documents, and `.gitignore` into any service repository. Customize `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md` for that repo. Phase 3's review prompt is generic — it asks Claude to map changes back to that repo's own `AI_ACCEPTANCE_CRITERIA.md` and `AGENTS.md` / `CLAUDE.md` allowed lists, so no Phase 3 code change is needed when reused.
 
-## Phase 4 — Implementer integration (deferred)
+## Phase 4 — Codex one-shot implementer (current)
 
-Planned: `-Implementer codex` will hand the task description and context bundle to Codex CLI for proposing a patch. The human still reviews and commits. Phase 4 is **not** part of Phase 3.
+Goal: hand the task description and pre-filtered context bundle to Codex CLI for **one-shot** implementation. Phase 4 still does **not** implement Codex ↔ Claude fix loops, does **not** retry on failure, does **not** invoke Codex without an explicit human switch, does **not** commit, push, or deploy, and does **not** install dependencies.
+
+### What Codex one-shot implementation does
+
+When `-Implementer codex` is passed, the harness writes `codex-implementation-prompt.md` under the run folder. The prompt:
+
+- explicitly tells Codex to act as **implementer only**, make the smallest safe change for the current Goal or TaskId, follow `AGENTS.md` / `AI_ACCEPTANCE_CRITERIA.md` / `AI_TASK_QUEUE.md` / `AI_WORKFLOW.md`, and **stop and report on ambiguity** rather than guessing scope
+- forbids commit, push, deploy, dependency installation, broad refactors, files outside the active task scope, secret access, and any permissive sandbox flag (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)
+- embeds only summary artifacts (git status, diff stat, diff names, detected-tests summary, `test-summary.json`, optional `AI_FINAL_HANDOFF.md`, heads of the control documents) — it never embeds raw file diffs, full source contents, or secret material
+- requires a structured response with sections: Summary, Files Changed, Tests Run Or Not Run, Risks, Follow-up Needed
+
+### Prompt-only Codex (default when `-Implementer codex` is set)
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -DryRun -Goal "Phase 4 Codex prompt smoke test"
+```
+
+The harness writes `codex-implementation-prompt.md` and a placeholder `codex-output.md` saying `Codex implementation was requested but not executed.`. The Codex CLI is **NOT** invoked. Hand the prompt file to Codex CLI yourself, then re-read the handoff.
+
+### One-shot Codex execution (only after verifying local Codex CLI flags)
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -RunImplementer -TestLevel unit -Goal "Implement next small task"
+```
+
+`-RunImplementer` is the only switch that allows the harness to spawn the Codex CLI process. The invocation is locked to:
+
+```
+codex exec --sandbox workspace-write <prompt>
+```
+
+The harness deliberately does **not** pass `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, any yolo / bypass / permissive-fallback flag, or any deprecated full-auto flag. If the safe pattern fails (CLI missing, non-zero exit code, exception), the harness writes a clear `Automatic Codex implementation failed or was unsupported` notice into `codex-output.md`, refreshes the post-Codex git context, and continues to the final handoff. **No alternative permissive modes are attempted. The harness never retries.**
+
+Before relying on `-RunImplementer` in routine runs, verify locally that your Codex CLI version accepts the safe invocation:
+
+```
+codex exec --help
+codex status
+```
+
+`-DryRun` always wins. Even if `-RunImplementer` is also passed, `-DryRun` suppresses the Codex CLI invocation; `codex-output.md` records the suppression so the handoff is unambiguous.
+
+### Codex + Claude review prompt in the same run
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -RunImplementer -Reviewer claude -TestLevel unit -Goal "Implement and prepare Claude review"
+```
+
+After the one-shot Codex attempt completes, the harness writes the Phase 3 review prompt as usual. Claude is still **reviewer-only**. Phase 4 does **not** automatically pipe Codex changes through Claude in a fix loop, and Phase 4 does **not** invoke Claude unless `-Reviewer claude` is also explicitly set. There is no Codex ↔ Claude conversation in this phase.
+
+### Implementer flags summary
+
+| Flag                    | Default          | Effect                                                                                                                       |
+| ----------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `-Implementer none`     | yes              | No Codex artifacts generated.                                                                                                |
+| `-Implementer codex`    |                  | Always writes `codex-implementation-prompt.md`. Without `-RunImplementer`, also writes a placeholder `codex-output.md`.      |
+| `-RunImplementer`       | off              | When set together with `-Implementer codex` and `-DryRun` is off, attempts a single `codex exec --sandbox workspace-write`.  |
+| `-CodexCommand <name>`  | `codex`          | Override the executable name on PATH.                                                                                        |
+| `-CodexSandbox <mode>`  | `workspace-write`| Sandbox argument passed to `codex exec`. Documented values that grant write access. `danger-full-access` is forbidden.       |
+| `-CodexRunMode <mode>`  | `prompt-only`    | Recorded in the handoff parameters block; reserved for future modes.                                                         |
+
+### Handoff integration
+
+`write-final-handoff.ps1` adds a `Codex Implementer` section listing the mode, prompt and output paths, status, and the captured exit code (when present). The Result line is Codex-aware:
+
+- tests failed → `tests failed, manual review required` (Codex status ignored)
+- Codex ran via `-RunImplementer` but failed/unsupported → `Codex implementation failed or was not executed safely — manual review required`
+- Claude verdict `block` → `Claude review verdict: block — manual review required`
+- Claude verdict `request_changes` → `Claude review verdict: request changes — manual review required`
+- Codex ran + tests passed + Claude `approve` → `Codex ran, tests passed, Claude review approved — manual approval still required`
+- Codex ran + tests passed (no Claude verdict) → `Codex ran and tests passed — manual approval still required`
+- Codex ran + no automated verification → `Codex ran but no automated verification available — manual review required`
+- Codex requested but not executed (prompt-only) → `manual review required (Codex prompt generated but not executed)`
+- otherwise → the existing Phase 2 / Phase 3 fallbacks apply
+
+The handoff never claims approval unless every relevant gate (tests, Codex execution, Claude verdict if requested) passes — and even then, manual approval is still required.
+
+### Local artifacts
+
+Generated `codex-implementation-prompt.md` and `codex-output.md` live under `ai-runs/<timestamp>/`. They are **local-only** and remain ignored by `.gitignore`. Do not commit them.
+
+### Out of scope for Phase 4
+
+- Codex ↔ Claude fix loops
+- Automatic retries on Codex failure
+- Auto-commit, auto-push, auto-deploy
+- Dependency installation
+- Permissive Codex sandboxes (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)
 
 ## Non-negotiable rules
 
