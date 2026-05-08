@@ -1,517 +1,117 @@
 # AI Workflow
 
-This repository uses a human-in-the-loop AI workflow. **No AI tool commits, pushes, or deploys on its own in any phase covered here.**
+This repository uses a local, human-in-the-loop workflow for Codex CLI and
+Claude Code CLI. The harness helps collect context, generate prompts, run
+optional safe checks, and write a final handoff. It does not replace the local
+CLIs, and it never approves work on its own.
+
+## Core Roles
+
+| Role | Responsibility |
+| ---- | -------------- |
+| Human operator | Defines the goal, reviews artifacts, decides whether to commit or stop. |
+| PowerShell harness | Collects git context, detects tests, writes prompts, enforces safety checks, and writes the handoff. |
+| Codex CLI | Optional implementer, invoked only with explicit opt-in. |
+| Claude Code CLI | Optional reviewer, invoked only with explicit opt-in and review-only tooling. |
+| Local tests | Optional verification, selected conservatively by the harness. |
+
+## Files To Customize First
+
+After copying the template into a target service repo, customize:
+
+- `AI_PRODUCT_SPEC.md` - describe the service, users, scope, and success
+  criteria.
+- `AI_TASK_QUEUE.md` - identify the next small task and set its status.
+- `AI_ACCEPTANCE_CRITERIA.md` - adapt the review checklist to the target repo.
+
+Do not start from real AI execution. Start with dry-run and prompt-only modes.
+
+## Recommended Flow
+
+1. Confirm the target repo is a git repository.
+2. Validate the install with `tools/validate-template-install.ps1`.
+3. Fill in `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md`.
+4. Run a dry-run smoke check:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -DryRun -Goal "service smoke test"
+   ```
+
+5. Read the generated `AI_FINAL_HANDOFF.md`.
+6. Generate prompt-only artifacts before real AI execution:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -DryRun -Goal "Codex prompt only"
+
+   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Claude review prompt only"
+   ```
+
+7. Optionally run safe local checks with `-TestLevel unit`.
+8. Only after the prompts, checks, and CLI setup are trusted, opt in to
+   `-RunImplementer`, `-RunReviewer`, or `-EnableFixLoop`.
+9. Review the final handoff and git diff by hand.
+10. Commit or discard changes manually outside the harness.
+
+## Capability Summary
+
+| Capability | Default behavior | Explicit opt-in |
+| ---------- | ---------------- | --------------- |
+| Context collection | On for harness runs | None |
+| Test detection | On for harness runs | None |
+| Test execution | Off by default | `-TestLevel unit`, `integration`, `e2e`, or `all` |
+| Codex prompt generation | Off by default | `-Implementer codex` |
+| Codex execution | Off by default | `-Implementer codex -RunImplementer` |
+| Claude prompt generation | Off by default | `-Reviewer claude` |
+| Claude execution | Off by default | `-Reviewer claude -RunReviewer` |
+| Bounded fix loop | Off by default | `-EnableFixLoop` with implementer and reviewer execution |
+
+`-DryRun` suppresses test execution, Codex execution, and Claude execution even
+when other execution switches are present.
+
+## Safety Rules
+
+The harness is designed around conservative local defaults:
+
+- No automatic commit, push, tag, merge, or deploy.
+- No dependency installation during harness runs.
+- No permissive sandbox flags such as `danger-full-access`, bypass, yolo, or
+  full-auto.
+- No raw secret material in collected context or prompts.
+- No timestamped `ai-runs/` artifacts in version control.
+- No automatic approval; every run ends with a human-reviewable handoff.
+
+If a task appears to require breaking one of these rules, stop and handle the
+decision outside the harness.
+
+## Output Artifacts
+
+Each run writes a timestamped local folder under `ai-runs/`. Common artifacts
+include:
+
+- `AI_FINAL_HANDOFF.md` - the primary file to review last.
+- `goal.txt` - the goal passed to the run.
+- `git-status.txt`, `git-diff-stat.txt`, `git-diff-names.txt` - summarized git
+  context.
+- `detected-tests.md` and `detected-tests.json` - test detection output.
+- `test-output.txt` and `test-summary.json` - test execution summary, even when
+  no tests were selected.
+- `codex-implementation-prompt.md` and `codex-output.md` when Codex was
+  requested.
+- `claude-review-prompt.md` and `claude-review.md` when Claude review was
+  requested.
+- `loop-summary.json` when the bounded fix loop was enabled.
+
+Generated run folders are local artifacts. Do not commit them.
 
-## Tools and roles
+## Handoff Review
 
-| Tool             | Role in this workflow                                                |
-| ---------------- | -------------------------------------------------------------------- |
-| ChatGPT (web)    | Planning, prompt design, breaking work into tasks                    |
-| Codex CLI        | Local code implementation (later phase)                              |
-| Claude Code CLI  | Local code review and controlled implementation (later phase)        |
-| PowerShell tools | Local orchestration: context collection, test detection, handoff doc |
-| git              | Version control. Commits are made by the human, not by tools         |
-| Local tests      | Validation. Test runners are detected in Phase 1 but not executed    |
+Before any commit, review:
 
-## Phase 1 — Foundation
+- The goal and active task ID.
+- The files changed and diff summary.
+- The selected test/check commands and their results.
+- Codex output, if Codex was requested.
+- Claude verdict, if Claude review was requested.
+- Any risks, stop reasons, or missing verification listed in the handoff.
 
-Goal: establish a safe scaffold the human can drive manually.
-
-1. Human writes / refines `AI_PRODUCT_SPEC.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AI_TASK_QUEUE.md`.
-2. Human runs `tools/ai-autopilot.ps1` (typically with `-DryRun` until trusted).
-3. The autopilot script:
-   - verifies the repo is a git work tree
-   - verifies all required control documents exist
-   - creates a timestamped folder under `ai-runs/`
-   - runs `tools/collect-context.ps1` (git status / diff snapshots)
-   - runs `tools/detect-tests.ps1` (probes for test config files)
-   - runs `tools/write-final-handoff.ps1` (produces `AI_FINAL_HANDOFF.md`)
-   - prints a final notice that nothing was committed, pushed, or deployed
-4. Human reads `AI_FINAL_HANDOFF.md` and decides next steps.
-
-In Phase 1, `-DryRun` means: do **not** invoke Codex, do **not** invoke Claude, do **not** run tests, do **not** install dependencies, do **not** commit, push, deploy, or perform destructive actions. `-DryRun` does still produce the safe local report files inside the run folder so the workflow can be smoke-tested.
-
-### Local artifacts and `.gitignore`
-
-Generated `ai-runs/<yyyyMMdd-HHmmss>/` folders are **local run artifacts**. They must not be committed. The repo's `.gitignore` ignores `ai-runs/*` while keeping the tracked `ai-runs/.gitkeep` sentinel so a fresh clone still has the directory.
-
-### Smoke-testing AutoCommit refusal
-
-`-AutoCommit` is a switch and is refused in Phase 1. To verify the refusal path:
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -AutoCommit -Goal "AutoCommit refusal test"
-```
-
-Expected: the script writes `AutoCommit is not permitted in Phase 1. Aborting before any action.` and exits with code `2` **before** creating any run folder under `ai-runs/`.
-
-## Phase 2 — Test detection + optional safe execution (current)
-
-Goal: produce a richer detection report and optionally run **safe, locally selected** test commands. Phase 2 does **not** invoke Codex CLI, does **not** invoke Claude Code CLI, does **not** auto-fix, does **not** commit, push, or deploy.
-
-### What changed in Phase 2
-
-- `tools/detect-tests.ps1` now writes structured `detected-tests.json` with `repoRoot`, `detectedStacks`, `testCommands` (each with `id`, `name`, `workingDirectory`, `command`, `level`, `safeByDefault`, `reason`), `warnings`, and `noTestsFound`. It also emits a human-readable `detected-tests.md`. Detection covers Node (npm/pnpm), Python (`pyproject.toml`/`pytest.ini`/`requirements.txt`/`tests/`), and Playwright, including split repositories (`frontend/`, `backend/`).
-- `tools/ai-autopilot.ps1` accepts `-TestLevel none|unit|integration|e2e|all` and `-SkipE2E`. It only executes commands generated by `detect-tests.ps1`, validates each `workingDirectory` is inside the repository root, and rejects any command matching install/destructive/git/deploy patterns.
-- `tools/write-final-handoff.ps1` adds Test Execution Summary, Test Output Location, and a Result line whose value reflects whether tests ran and whether any failed.
-- Run folders are stamped to millisecond precision (`yyyyMMdd-HHmmss-fff`) and append `-NNN` if the same millisecond is hit twice. Existing run folders are never overwritten or deleted.
-
-### Detection-only run
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -DryRun -Goal "Phase 2 smoke test"
-```
-
-`-DryRun` records `goal.txt`, git context, `detected-tests.{md,json}`, `test-output.txt`, `test-summary.json`, and `AI_FINAL_HANDOFF.md`. No tests are executed even if `-TestLevel` is set.
-
-### Run unit-level safe commands
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -TestLevel unit -Goal "Run unit-level validation"
-```
-
-Only commands whose `safeByDefault=true` and whose `level` is `unit`, `typecheck`, or `lint` will run. E2E commands are never selected at `-TestLevel unit`.
-
-### TestLevel selection rules
-
-| TestLevel     | Selected commands                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------- |
-| `none`        | Detection only. No execution.                                                                           |
-| `unit`        | `safeByDefault=true` AND `level ∈ {unit, typecheck, lint}`. E2E never selected.                         |
-| `integration` | Above plus `level=integration`. E2E selected only if `-SkipE2E` is **not** set.                         |
-| `e2e`         | Only `level=e2e`, and only if `-SkipE2E` is **not** set.                                                |
-| `all`         | All `safeByDefault=true` commands. E2E only if `-SkipE2E` is **not** set.                               |
-
-### Avoiding E2E
-
-Pass `-SkipE2E` together with `-TestLevel integration` or `-TestLevel all` to guarantee Playwright / browser commands are excluded even if they were detected. E2E runs can have side effects (browsers, network, artifacts), so `-SkipE2E` is the safe default for unattended runs.
-
-### Command safety guarantees
-
-- Only commands listed in `detected-tests.json` are executed; arbitrary user-supplied command text is never run.
-- Each `workingDirectory` is resolved and required to be inside the repository root; otherwise the command is skipped and recorded as failed.
-- Any command text matching `npm install`, `pnpm install`, `yarn install`, `pip install`, `poetry install`, `uv add`, `rm -rf`, `Remove-Item -Recurse`, `git reset --hard`, `git clean`, `git push`, `git commit`, or `deploy` is rejected by the denylist before execution.
-- The script does not install dependencies, does not modify source code, does not commit, push, deploy, or invoke Codex / Claude Code.
-
-### Local artifacts and `.gitignore`
-
-Generated `ai-runs/<yyyyMMdd-HHmmss-fff>/` folders are **local run artifacts**. They must not be committed. The repo's `.gitignore` ignores `ai-runs/*` while keeping the tracked `ai-runs/.gitkeep` sentinel so a fresh clone still has the directory.
-
-The `.claude/` directory is **local Claude Code CLI state** — per-machine permission settings (`settings.local.json`) and session data created by the CLI itself. It is ignored by `.gitignore` and must not be committed. Both `ai-runs/` and `.claude/` are local-only; treat anything inside them as scratch state, not source.
-
-### Smoke-testing AutoCommit refusal
-
-`-AutoCommit` remains refused in Phase 2:
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -AutoCommit -Goal "AutoCommit refusal test"
-```
-
-Expected: the script writes `AutoCommit is not permitted (Phase 1 + Phase 2). Aborting before any action.` and exits with code `2` **before** creating any run folder under `ai-runs/`.
-
-## Phase 3 — Claude review prompt + optional reviewer (current)
-
-Goal: produce a high-quality review prompt for Claude Code CLI and, optionally, run Claude in **review-only** mode against the run artifacts. Phase 3 still does **not** invoke Codex CLI, does **not** auto-fix, does **not** commit, push, or deploy.
-
-### What Claude review does
-
-When `-Reviewer claude` is passed, the harness writes `claude-review-prompt.md` under the run folder. The prompt:
-
-- explicitly tells Claude `Do not edit files. Do not run commands. Review only.`
-- embeds only summary artifacts (git status, diff stat, diff names, detected tests summary, `test-summary.json`, head of `test-output.txt`, and the final handoff if present); it never embeds raw file diffs or any secret material
-- asks Claude to evaluate acceptance-criteria match, allowed-files scope, test coverage and outcomes, diff size, secret-like paths, safety-rule compliance, and approval readiness
-- requires a structured response with sections: Verdict (`approve` | `request_changes` | `block`), Summary, Blocking Issues, Non-blocking Issues, Test Assessment, Safety Assessment, Suggested Fix Prompt For Codex, Approval Readiness, Suggested Commit Message
-
-### Prompt-only review (default)
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Phase 3 review prompt smoke test"
-```
-
-The harness writes `claude-review-prompt.md` and a placeholder `claude-review.md` saying `Claude review was requested but not executed.`. The Claude CLI is NOT invoked. Hand the prompt file to Claude Code yourself, paste the response back into `claude-review.md`, then re-read the handoff.
-
-### Prompt-only review with unit tests
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -TestLevel unit -Goal "Phase 3 unit + review prompt smoke test"
-```
-
-This runs the Phase 2 unit-level test selection rules and then writes the review prompt + placeholder. Claude CLI is still not invoked.
-
-### Automatic Claude review (only after verifying local Claude CLI flags)
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -RunReviewer -TestLevel unit -Goal "Phase 3 run Claude review"
-```
-
-`-RunReviewer` is the only switch that allows the harness to spawn the Claude CLI process. The invocation is review-only and uses, in order: `-p` (print mode), `--output-format text`, and `--tools ""` to disable tool use. The harness deliberately does **not** pass `--dangerously-skip-permissions`, `--permission-mode`, `--allowedTools`, `--disallowedTools`, or any other flag that could allow file edits or bash execution. If the local Claude CLI does not accept this exact pattern, the harness writes a clear `Automatic Claude review could not be executed safely` message into `claude-review.md` and continues to the final handoff. **No alternative permissive modes are attempted.**
-
-Verify locally that your Claude CLI version accepts `claude -p ... --output-format text --tools ""` before relying on `-RunReviewer` in routine runs.
-
-### Reviewer flags summary
-
-| Flag                     | Default       | Effect                                                                                              |
-| ------------------------ | ------------- | --------------------------------------------------------------------------------------------------- |
-| `-Reviewer none`         | yes           | No Claude artifacts generated.                                                                      |
-| `-Reviewer claude`       |               | Always writes `claude-review-prompt.md`. Without `-RunReviewer`, also writes a placeholder review. |
-| `-RunReviewer`           | off           | When set together with `-Reviewer claude`, attempts the review-only Claude invocation pattern.      |
-| `-ClaudeCommand <name>`  | `claude`      | Override the executable name on PATH.                                                               |
-| `-ClaudeReviewMode`      | `prompt-only` | Reserved for future review modes; recorded in the handoff parameters block.                         |
-
-### Handoff integration
-
-`write-final-handoff.ps1` adds a `Claude Review` section listing the mode, the prompt and output paths, a status line, and the parsed verdict. The Result line is verdict-aware:
-
-- tests failed → `tests failed, manual review required` (verdict ignored)
-- verdict `block` → `Claude review verdict: block — manual review required`
-- verdict `request_changes` → `Claude review verdict: request changes — manual review required`
-- verdict `approve` + tests passed → `Claude review approved and tests passed — manual approval still required`
-- verdict `approve` + no tests run → `Claude review approved (no automated verification of tests this run) — manual approval still required`
-- otherwise → the existing Phase 2 fallbacks apply
-
-The handoff never claims approval unless the parsed `claude-review.md` actually contains a verdict line of `approve`.
-
-### Local artifacts
-
-Generated `claude-review-prompt.md` and `claude-review.md` live under `ai-runs/<timestamp>/`. They are **local-only** and remain ignored by `.gitignore`. Do not commit them.
-
-### Reusability
-
-This harness is template code. Copy `tools/`, the control documents, and `.gitignore` into any service repository. Customize `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md` for that repo. Phase 3's review prompt is generic — it asks Claude to map changes back to that repo's own `AI_ACCEPTANCE_CRITERIA.md` and `AGENTS.md` / `CLAUDE.md` allowed lists, so no Phase 3 code change is needed when reused.
-
-## Phase 4 — Codex one-shot implementer (current)
-
-Goal: hand the task description and pre-filtered context bundle to Codex CLI for **one-shot** implementation. Phase 4 still does **not** implement Codex ↔ Claude fix loops, does **not** retry on failure, does **not** invoke Codex without an explicit human switch, does **not** commit, push, or deploy, and does **not** install dependencies.
-
-### What Codex one-shot implementation does
-
-When `-Implementer codex` is passed, the harness writes `codex-implementation-prompt.md` under the run folder. The prompt:
-
-- explicitly tells Codex to act as **implementer only**, make the smallest safe change for the current Goal or TaskId, follow `AGENTS.md` / `AI_ACCEPTANCE_CRITERIA.md` / `AI_TASK_QUEUE.md` / `AI_WORKFLOW.md`, and **stop and report on ambiguity** rather than guessing scope
-- forbids commit, push, deploy, dependency installation, broad refactors, files outside the active task scope, secret access, and any permissive sandbox flag (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)
-- embeds only summary artifacts (git status, diff stat, diff names, detected-tests summary, `test-summary.json`, optional `AI_FINAL_HANDOFF.md`, heads of the control documents) — it never embeds raw file diffs, full source contents, or secret material
-- requires a structured response with sections: Summary, Files Changed, Tests Run Or Not Run, Risks, Follow-up Needed
-
-### Prompt-only Codex (default when `-Implementer codex` is set)
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -DryRun -Goal "Phase 4 Codex prompt smoke test"
-```
-
-The harness writes `codex-implementation-prompt.md` and a placeholder `codex-output.md` saying `Codex implementation was requested but not executed.`. The Codex CLI is **NOT** invoked. Hand the prompt file to Codex CLI yourself, then re-read the handoff.
-
-### One-shot Codex execution (only after verifying local Codex CLI flags)
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -RunImplementer -TestLevel unit -Goal "Implement next small task"
-```
-
-`-RunImplementer` is the only switch that allows the harness to spawn the Codex CLI process. The invocation is locked to:
-
-```
-codex exec --sandbox workspace-write <prompt>
-```
-
-The harness deliberately does **not** pass `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, any yolo / bypass / permissive-fallback flag, or any deprecated full-auto flag. If the safe pattern fails (CLI missing, non-zero exit code, exception), the harness writes a clear `Automatic Codex implementation failed or was unsupported` notice into `codex-output.md`, refreshes the post-Codex git context, and continues to the final handoff. **No alternative permissive modes are attempted. The harness never retries.**
-
-Before relying on `-RunImplementer` in routine runs, verify locally that your Codex CLI version accepts the safe invocation:
-
-```
-codex exec --help
-codex status
-```
-
-`-DryRun` always wins. Even if `-RunImplementer` is also passed, `-DryRun` suppresses the Codex CLI invocation; `codex-output.md` records the suppression so the handoff is unambiguous.
-
-### Codex + Claude review prompt in the same run
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -RunImplementer -Reviewer claude -TestLevel unit -Goal "Implement and prepare Claude review"
-```
-
-After the one-shot Codex attempt completes, the harness writes the Phase 3 review prompt as usual. Claude is still **reviewer-only**. Phase 4 does **not** automatically pipe Codex changes through Claude in a fix loop, and Phase 4 does **not** invoke Claude unless `-Reviewer claude` is also explicitly set. There is no Codex ↔ Claude conversation in this phase.
-
-### Implementer flags summary
-
-| Flag                    | Default          | Effect                                                                                                                       |
-| ----------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `-Implementer none`     | yes              | No Codex artifacts generated.                                                                                                |
-| `-Implementer codex`    |                  | Always writes `codex-implementation-prompt.md`. Without `-RunImplementer`, also writes a placeholder `codex-output.md`.      |
-| `-RunImplementer`       | off              | When set together with `-Implementer codex` and `-DryRun` is off, attempts a single `codex exec --sandbox workspace-write`.  |
-| `-CodexCommand <name>`  | `codex`          | Override the executable name on PATH.                                                                                        |
-| `-CodexSandbox <mode>`  | `workspace-write`| Sandbox argument passed to `codex exec`. Documented values that grant write access. `danger-full-access` is forbidden.       |
-| `-CodexRunMode <mode>`  | `prompt-only`    | Recorded in the handoff parameters block; reserved for future modes.                                                         |
-
-### Handoff integration
-
-`write-final-handoff.ps1` adds a `Codex Implementer` section listing the mode, prompt and output paths, status, and the captured exit code (when present). The Result line is Codex-aware:
-
-- tests failed → `tests failed, manual review required` (Codex status ignored)
-- Codex ran via `-RunImplementer` but failed/unsupported → `Codex implementation failed or was not executed safely — manual review required`
-- Claude verdict `block` → `Claude review verdict: block — manual review required`
-- Claude verdict `request_changes` → `Claude review verdict: request changes — manual review required`
-- Codex ran + tests passed + Claude `approve` → `Codex ran, tests passed, Claude review approved — manual approval still required`
-- Codex ran + tests passed (no Claude verdict) → `Codex ran and tests passed — manual approval still required`
-- Codex ran + no automated verification → `Codex ran but no automated verification available — manual review required`
-- Codex requested but not executed (prompt-only) → `manual review required (Codex prompt generated but not executed)`
-- otherwise → the existing Phase 2 / Phase 3 fallbacks apply
-
-The handoff never claims approval unless every relevant gate (tests, Codex execution, Claude verdict if requested) passes — and even then, manual approval is still required.
-
-### Local artifacts
-
-Generated `codex-implementation-prompt.md` and `codex-output.md` live under `ai-runs/<timestamp>/`. They are **local-only** and remain ignored by `.gitignore`. Do not commit them.
-
-### Out of scope for Phase 4
-
-- Codex ↔ Claude fix loops
-- Automatic retries on Codex failure
-- Auto-commit, auto-push, auto-deploy
-- Dependency installation
-- Permissive Codex sandboxes (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)
-
-## Phase 5 — Bounded Codex ↔ Claude fix loop (current)
-
-Goal: when the human opts in, run a small, bounded Codex ↔ Claude fix loop after the initial Codex one-shot implementation. Each iteration runs Codex (implementation prompt on iteration 1, fix-only prompt on iterations 2+), the safe local test selection, and the Claude reviewer. The loop stops as soon as Claude approves, the iteration budget is exhausted, or any Phase 5 safety check trips. **The loop never commits, pushes, deploys, installs dependencies, retries beyond `-MaxIterations`, escalates Codex sandbox flags, or proceeds without human approval at the end.**
-
-### What changes in Phase 5
-
-- New switch `-EnableFixLoop` gates the loop. Default is **off**. When off, the harness behaves identically to Phase 4.
-- New parameter `-FixTrigger` (`tests` | `claude` | `tests-or-claude`, default `tests-or-claude`) decides which failure types are eligible to trigger another Codex iteration.
-- `-MaxIterations` is hard-capped at `3`. Values outside `1..3` abort cleanly **before** any run folder is created and before any Codex / Claude process is spawned.
-- New parameters `-MaxChangedFiles` (default `12`) and `-MaxDiffStatLines` (default `120`) bound how large the cumulative diff is allowed to grow during the loop. The defaults are intentionally conservative; users may raise them per-invocation when working on a larger task.
-- Iterations 2+ use a **fix-only** Codex prompt produced by `tools/write-codex-fix-prompt.ps1`. The fix prompt embeds only failed-test summaries, the parsed Claude blocking / requested-changes content, and summary git context. It never embeds raw file diffs, full source files, or secret material.
-- Each iteration emits per-iteration artifacts: `iteration-XX-summary.md`, `iteration-XX-decision.json`, plus copies of the iteration's Codex prompt / output, test summary / log, and Claude review prompt / output.
-- Top-level files (`codex-implementation-prompt.md`, `codex-fix-prompt.md`, `codex-output.md`, `test-summary.json`, `test-output.txt`, `claude-review-prompt.md`, `claude-review.md`) hold the **latest iteration's** snapshot for backward compatibility with Phases 2–4 readers.
-- A new `loop-summary.json` records the entire iteration history (action / reason per iteration), and `AI_FINAL_HANDOFF.md` adds a `## Loop Summary` table.
-
-### Default behaviour is unchanged from Phase 4
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -DryRun -Goal "Phase 5 default smoke test"
-```
-
-With no Phase 5 switches set, the harness runs exactly one iteration, writes the same artifacts as Phase 4 plus per-iteration snapshots, and emits a `Loop Summary` block in the handoff that records `EnableFixLoop=False` and `CompletedIterations=1`.
-
-### Prompt-only fix loop (DryRun preview)
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -EnableFixLoop -MaxIterations 2 -Implementer codex -Reviewer claude -DryRun -Goal "Phase 5 fix-loop preview"
-```
-
-`-DryRun` always wins. Even though `-EnableFixLoop` is set, no Codex CLI or Claude CLI process is spawned. The harness writes the iteration-1 implementation prompt, placeholder Codex output, placeholder Claude review, and stops after iteration 1 with reason `no-codex-execution-cannot-fix` (Codex did not actually edit anything, so there is nothing to fix in iteration 2). This is the recommended pattern for inspecting prompts before enabling real execution.
-
-### Active fix loop (only after verifying local CLI flags)
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -EnableFixLoop -MaxIterations 2 `
-    -Implementer codex -RunImplementer `
-    -Reviewer claude  -RunReviewer `
-    -TestLevel unit -Goal "Phase 5: small fix iteration"
-```
-
-This is the only configuration in which the harness will spawn Codex and Claude across multiple iterations. It still uses the locked patterns:
-
-- Codex: `codex exec --sandbox workspace-write <prompt>` for both the implementation prompt and the fix prompt.
-- Claude: `claude -p <prompt> --output-format text --tools ""`.
-
-No permissive flags are ever introduced. Verify `codex exec --help`, `codex status`, and `claude -p --help` locally before relying on this configuration.
-
-### Loop control flags summary
-
-| Flag                     | Default | Effect                                                                                                                  |
-| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `-EnableFixLoop`         | off     | Master switch for Phase 5. Off = single iteration (Phase 4 behaviour).                                                  |
-| `-MaxIterations <n>`     | `1`     | Number of iterations. Must be in `1..3`; otherwise the harness aborts before any action.                                |
-| `-FixTrigger <which>`    | `tests-or-claude` | `tests` continues only on test failures; `claude` continues only on Claude `request_changes`; `tests-or-claude` continues on either. |
-| `-MaxChangedFiles <n>`   | `12`    | Halt the loop if the cumulative changed-file count exceeds this value. Override per-invocation for larger tasks.        |
-| `-MaxDiffStatLines <n>`  | `120`   | Halt the loop if cumulative insertions+deletions exceed this value. Override per-invocation for larger tasks.           |
-
-### Stop conditions (any one halts the loop)
-
-- Claude verdict `approve` → stop (success path; manual approval still required).
-- Claude verdict `block` → halt, manual review.
-- Iteration budget exhausted (`iteration >= MaxIterations`) → stop.
-- `-EnableFixLoop` is off → stop after iteration 1.
-- `-MaxChangedFiles` exceeded → halt.
-- `-MaxDiffStatLines` exceeded → halt.
-- Secret-like paths appear in the changed-file list → halt.
-- The same failure fingerprint repeats across consecutive iterations → halt.
-- Codex execution failed or was unsupported → halt.
-- No Claude verdict was detected and no fixable test failure was observed → stop, manual review.
-- Tests are missing AND Claude was not executed → stop, manual review.
-- Codex never executed in iteration 1 (e.g. `-RunImplementer` not set, `-DryRun` set, `-Implementer none`) → stop after iteration 1; iterations 2+ would have nothing to fix.
-
-"No tests found", "no commands selected", and "Claude review not executed" are NEVER treated as success. The harness always falls back to "manual review required" in those cases.
-
-### Iteration artifacts
-
-For each iteration `XX` the harness writes:
-
-- `iteration-XX-summary.md` — human-readable iteration summary.
-- `iteration-XX-decision.json` — structured decision record with stop signals, fingerprint, and chosen action.
-- `iteration-XX-codex-implementation-prompt.md` (iteration 1) or `iteration-XX-codex-fix-prompt.md` (iterations 2+).
-- `iteration-XX-codex-output.md` — copy of the latest Codex output for that iteration.
-- `iteration-XX-test-summary.json`, `iteration-XX-test-output.txt`.
-- `iteration-XX-claude-review-prompt.md`, `iteration-XX-claude-review.md`.
-
-Top-level files inside the run folder (`codex-output.md`, `test-summary.json`, `test-output.txt`, `claude-review.md`, etc.) are the latest iteration's snapshot and are read by `write-final-handoff.ps1` for backward compatibility with Phase 2/3/4 readers.
-
-### Smoke-testing AutoCommit refusal
-
-`-AutoCommit` remains refused in Phase 5:
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -AutoCommit -EnableFixLoop -Goal "AutoCommit refusal test"
-```
-
-Expected: the script writes `AutoCommit is not permitted (Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5). Aborting before any action.` and exits with code `2` **before** any run folder is created.
-
-### Smoke-testing MaxIterations cap
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -EnableFixLoop -MaxIterations 5 -DryRun -Goal "MaxIterations cap test"
-```
-
-Expected: the script writes a clear error stating MaxIterations must be in `1..3` and exits with code `2` **before** any run folder is created.
-
-### Out of scope for Phase 5
-
-- AutoCommit, auto-push, auto-deploy, auto-tag, auto-merge.
-- Dependency installation in any iteration.
-- Codex execution outside `codex exec --sandbox workspace-write`.
-- Permissive sandbox / approval flags (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass).
-- Iteration counts greater than `3`.
-- Shipping raw source diffs or secret material into the fix prompt.
-
-## Phase 6 — Packaging and reuse (current)
-
-Goal: make this template safely reusable across many service repositories. Phase 6 does **not** add or change any Codex / Claude / fix-loop behaviour. It only packages what already exists so it can be copied, validated, and onboarded into a real service repo without losing any of the safety guarantees from Phases 1–5.
-
-### Template source vs. target service repo
-
-- **Template source repo:** the repository that contains this `AI_WORKFLOW.md`. It hosts the canonical `tools/`, the canonical control documents, and the manifest. Treat it as upstream.
-- **Target service repo:** any real product or service repository where you want to use the harness. The target gets a copy of the template files; nothing in the target is mutated by the template scripts beyond what `copy-template-to-service.ps1 -Apply` writes.
-
-The two repos are kept loosely coupled: the target reads its own `TEMPLATE_MANIFEST.json` (which was copied from the source) and runs its own `tools/*.ps1`. Updating the template later means re-running the copy script with `-Apply` against the target.
-
-### Phase 6 deliverables
-
-- `README.md` — practical template overview, who/what, how to copy, safety summary.
-- `TEMPLATE_USAGE.md` — main user guide: quick start, recommended safe progression, example commands, safety, troubleshooting.
-- `SERVICE_ONBOARDING_CHECKLIST.md` — non-developer checklist for applying the template to a real service repo.
-- `TEMPLATE_CHANGELOG.md` — phase-by-phase changelog (Phases 1–6).
-- `TEMPLATE_MANIFEST.json` — machine-readable manifest containing `templateName`, `templateVersion`, `phasesImplemented`, `requiredFiles`, `controlDocuments`, `toolFiles`, `sentinelFiles`, `neverCopy`, `localArtifactPatterns`, `gitignoreRulesToAppend`, `forbiddenByDefault`, `recommendedFirstCommands`, `copyScript`, `validationScript`, and human-approval flags.
-- `tools/copy-template-to-service.ps1` — preview-by-default copier. Reads `TEMPLATE_MANIFEST.json` to decide what to copy; never copies `ai-runs/<timestamp>/`, `.claude/`, or `.git/`; refuses to overwrite control documents unless `-OverwriteControlDocs` is explicitly passed; never invokes git, never installs dependencies, never deletes files.
-- `tools/validate-template-install.ps1` — install validator with a `-RunSmoke` switch. Checks required control documents, tool files, `ai-runs/.gitkeep`, `.gitignore` rules (warn-only), git repo state, and PowerShell parser-tokenises each key script. With `-RunSmoke`, it runs `ai-autopilot.ps1 -DryRun -Goal "template install smoke test"`; it does **not** invoke Codex, does **not** invoke Claude, and does **not** execute tests.
-
-### Copy script — preview, then apply
-
-The default mode is **preview**. The script prints what it would copy and exits without writing anything.
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 -TargetRepo D:\path\to\your-service-repo
-```
-
-Re-run with `-Apply` once the preview list looks correct.
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 -TargetRepo D:\path\to\your-service-repo -Apply
-```
-
-Optional flags:
-
-| Flag                            | Effect                                                                                                                                              |
-|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `-Apply`                        | Write files. Without this flag, the script is preview-only.                                                                                         |
-| `-OverwriteControlDocs`         | Allow overwriting existing `AI_PRODUCT_SPEC.md`, `AI_TASK_QUEUE.md`, `AI_WORKFLOW.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AGENTS.md`, `CLAUDE.md`. Default is to preserve them. |
-| `-IncludeLocalGitignoreRules`   | Append `ai-runs/*`, `!ai-runs/.gitkeep`, and `.claude/` to the target's `.gitignore`. Skipped automatically if those rules already exist.            |
-
-The copy script always refuses to:
-
-- copy onto itself (template path === target path)
-- copy `.git/`, `.claude/`, or any timestamped folder under `ai-runs/`
-- run `git add`, `git commit`, `git push`, or any deploy command
-- install dependencies (`npm`, `pnpm`, `yarn`, `pip`, `poetry`, `uv`, …)
-- delete any file in the target
-
-### Validation script — sanity check the install
-
-Run from inside the target repo (or pass `-TargetRepo`):
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -TargetRepo .
-```
-
-This checks:
-
-- every entry in `TEMPLATE_MANIFEST.json` → `requiredFiles` exists
-- every entry in `TEMPLATE_MANIFEST.json` → `toolFiles` exists
-- `ai-runs/.gitkeep` exists
-- `.gitignore` contains `ai-runs/*` and `.claude/` rules (warn-only)
-- the target is a git repository
-- `tools/ai-autopilot.ps1`, `tools/copy-template-to-service.ps1`, `tools/validate-template-install.ps1`, `tools/write-final-handoff.ps1`, `tools/collect-context.ps1`, and `tools/detect-tests.ps1` parse cleanly via `[System.Management.Automation.PSParser]::Tokenize`
-
-Add `-RunSmoke` to also run `ai-autopilot.ps1 -DryRun -Goal "template install smoke test"` (no Codex, no Claude, no tests):
-
-```
-powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -TargetRepo . -RunSmoke
-```
-
-The validator exits `0` when all required checks pass and `1` when any required file is missing or the smoke run fails. Warnings (e.g. missing `.gitignore` rules) do **not** cause a non-zero exit.
-
-### What to customise after copying
-
-After `copy-template-to-service.ps1 -Apply` completes, the human must edit two files in the target repo before running the harness against real work:
-
-- `AI_PRODUCT_SPEC.md` — describe what the service is, who uses it, what is in scope for the next iteration, what is out of scope, and how you will know "done".
-- `AI_TASK_QUEUE.md` — add at least one task ID (e.g. `T-101`) describing the change you want done first.
-
-Do not edit the harness scripts under `tools/`, `AGENTS.md`, `CLAUDE.md`, or `TEMPLATE_MANIFEST.json` in the target repo. Those carry the safety guarantees and the manifest is read by the validator.
-
-### Safe first commands after install
-
-In order, from the target service repo:
-
-1. `validate-template-install.ps1 -TargetRepo .`
-2. `validate-template-install.ps1 -TargetRepo . -RunSmoke`
-3. `ai-autopilot.ps1 -DryRun -Goal "service smoke test"`
-4. `ai-autopilot.ps1 -TestLevel unit -Goal "unit validation"`
-5. `ai-autopilot.ps1 -Implementer codex -DryRun -Goal "Codex prompt only"`
-6. `ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Claude review prompt only"`
-
-Only after every step above succeeds should you try `-RunImplementer`, `-RunReviewer`, or `-EnableFixLoop`. See `TEMPLATE_USAGE.md` Section B for the full safe progression.
-
-### Updating the template later
-
-When the template source repo gets a new phase, update an existing target service repo by:
-
-1. Pulling the latest in the **template source** repo.
-2. Running the copy script (preview first, then apply) against the target. Existing control documents are preserved by default; pass `-OverwriteControlDocs` only if you intend to discard your customisations.
-3. Re-running `validate-template-install.ps1 -TargetRepo <target> -RunSmoke` against the target.
-4. Reading the updated `TEMPLATE_CHANGELOG.md` to learn what changed.
-
-The copy script never deletes files in the target. If a Phase N+1 release renames a tool, you may end up with both the old and the new tool until you remove the old one by hand. The validator will not flag the leftover.
-
-### Local artifacts and `.gitignore` (recap)
-
-- `ai-runs/*` is local-only. Generated `ai-runs/<yyyyMMdd-HHmmss-fff>/` folders must never be committed. Keep `ai-runs/.gitkeep` tracked.
-- `.claude/` is local-only. It holds per-machine Claude Code CLI permission settings and session data.
-- The Phase 6 copy script never adds the timestamped run folders or the `.claude/` directory to the target.
-
-### Phase 6 hard rules (carried over from prior phases)
-
-- No `git commit`, `git push`, `git tag`, deploy command, or dependency install is performed by any Phase 6 script.
-- No real Codex CLI invocation occurs from the Phase 6 packaging path.
-- No real Claude CLI invocation occurs from the Phase 6 packaging path. The validator's `-RunSmoke` mode passes `-DryRun` to `ai-autopilot.ps1`, which suppresses Codex, Claude, and test execution.
-- The copy script's default is preview. `-Apply` is required to write any file.
-- The copy script never overwrites control documents unless `-OverwriteControlDocs` is passed explicitly.
-- The validator never modifies the target repo, never runs `git add/commit/push`, and never invokes Codex or Claude.
-- Human approval is still required at the end of every harness run.
-
-## Non-negotiable rules
-
-- No tool commits, pushes, deploys, or installs dependencies automatically in any phase described here.
-- No tool reads or echoes secret material (`.env`, `*.pem`, `*.key`, anything matching `*secret*`).
-- All AI tools operate inside the repository directory only.
-- Human approves every transition from one phase to the next.
+The handoff is evidence for human judgment. It is not an approval by itself.

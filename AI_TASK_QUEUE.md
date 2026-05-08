@@ -1,24 +1,42 @@
 # AI Task Queue
 
-> One row per task. Task IDs use the format `T-NNN` (zero-padded). Update Status manually as work progresses. Phase 1 of the harness does not modify this file automatically.
+Use this file to choose the next unit of work for the harness. Keep tasks small,
+specific, and reviewable. The harness does not edit this queue automatically;
+update statuses by hand as work moves forward.
 
-## Status legend
+## How To Use This Queue
 
-- `todo` — not started
-- `doing` — in progress (only one at a time, ideally)
-- `blocked` — waiting on input or decision
-- `done` — completed and verified
-- `cancelled` — no longer needed
+1. Add one row per task.
+2. Give each task a stable ID such as `T-101`.
+3. Keep exactly one task in `doing` when you want the harness to focus on it.
+4. Put acceptance notes in the `Notes` column or link to
+   `AI_ACCEPTANCE_CRITERIA.md`.
+5. Move finished work to `done` only after human review.
 
-## Queue
+## Status Legend
 
-| ID    | Title                                                       | Status | Notes                                                                 |
-| ----- | ----------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| T-001 | (sample) Verify Phase 1 harness end-to-end                  | todo   | Run `ai-autopilot.ps1 -DryRun` and read AI_FINAL_HANDOFF.md           |
-| T-002 | Add Phase 2 test detection and optional test execution      | done   | Conservative harness enhancement; no Codex/Claude execution yet       |
-| T-003 | Add Phase 3 Claude review prompt and optional reviewer execution | done | Reviewer-only; no Codex/fix loop yet                                  |
-| T-004 | Add Phase 4 Codex one-shot implementation support           | done   | One-shot implementer only; no retry/fix loop yet                      |
-| T-005 | Add Phase 5 bounded Codex ↔ Claude fix loop                 | done   | Opt-in via -EnableFixLoop; capped at 3 iterations; loop never bypasses safety |
-| T-006 | Add Phase 6 template packaging and service onboarding support | done | Reuse support; no new Codex/Claude loop behavior. Adds README, TEMPLATE_USAGE, SERVICE_ONBOARDING_CHECKLIST, TEMPLATE_CHANGELOG, TEMPLATE_MANIFEST.json, copy-template-to-service.ps1 (preview-by-default), and validate-template-install.ps1 (`-RunSmoke` skips Codex/Claude/tests). Light-touch banner + TemplateVersion in autopilot / handoff. |
+- `ready` - ready to start
+- `doing` - active task for the next harness run
+- `blocked` - waiting on a decision, missing context, or failed validation
+- `review` - implementation or prompt output exists and needs human review
+- `done` - completed and verified by a human
+- `cancelled` - no longer planned
 
-<!-- Add new tasks above this line -->
+## Queue Template
+
+Replace these example rows after copying the template into a service repo.
+
+| ID    | Title                                      | Status | Notes |
+| ----- | ------------------------------------------ | ------ | ----- |
+| T-101 | Run the first dry-run smoke check          | ready  | Use `-DryRun`; read `AI_FINAL_HANDOFF.md`; no Codex or Claude execution. |
+| T-102 | Generate a Codex prompt for a small change | ready  | Use `-Implementer codex -DryRun`; review the prompt before real execution. |
+| T-103 | Generate a Claude review prompt            | ready  | Use `-Reviewer claude -DryRun`; review prompt contents before real execution. |
+
+## Active Task Notes
+
+When a task is moved to `doing`, capture any extra constraints here.
+
+- Active task ID: `<T-101>`
+- Allowed files or directories: `<paths>`
+- Validation command preference: `<dry run, unit, lint, typecheck, or manual>`
+- Known risks: `<risk notes>`

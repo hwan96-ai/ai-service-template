@@ -1,291 +1,212 @@
-# TEMPLATE_USAGE.md — Main user guide
+# Template Usage
 
-This guide is the practical "how do I actually use it" companion to
-`README.md`. Read this if you have already read the README and want to start
-running the harness in a real service repo.
+This is the practical guide for using the local safety harness in a real
+service repository. The harness wraps Codex CLI and Claude Code CLI with
+PowerShell scripts, conservative defaults, prompt generation, optional local
+checks, and a final handoff for human review.
 
-> **Template version:** `0.6.0`
->
-> **Phases shipped:** 1, 2, 3, 4, 5, 6.
+## When To Read This
 
-## Table of contents
+Read this after the README if you want to:
 
-- [A. Quick start for a new service repo](#a-quick-start-for-a-new-service-repo)
-- [B. Recommended safe progression](#b-recommended-safe-progression)
-- [C. Example commands](#c-example-commands)
-- [D. Safety explanation](#d-safety-explanation)
-- [E. Troubleshooting](#e-troubleshooting)
+- copy the template into a target service repo,
+- customize the control documents,
+- run the first dry-run smoke check,
+- generate prompt-only Codex or Claude artifacts,
+- opt in to real local CLI execution safely.
 
----
+## What You Customize After Copying
 
-## A. Quick start for a new service repo
+Customize these files in the target service repo before real work:
 
-This is the path you should follow the **first** time you copy this template
-into a real repo.
+- `AI_PRODUCT_SPEC.md` - describe the service, users, scope, out-of-scope
+  areas, success criteria, and important runtime constraints.
+- `AI_TASK_QUEUE.md` - add one or more small tasks and mark the active task.
+- `AI_ACCEPTANCE_CRITERIA.md` - adapt the checklist to the target repo while
+  keeping the safety gates intact.
 
-1. **Copy template files into the target repo (preview, then apply).**
+Usually leave these files unchanged at first:
 
-   ```powershell
-   # Step 1a — preview only. No files are written.
-   powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 `
-       -TargetRepo D:\path\to\your-service-repo
+- `tools/*.ps1` - the harness implementation.
+- `AGENTS.md` and `CLAUDE.md` - default guardrails for Codex and Claude.
+- `TEMPLATE_MANIFEST.json` - the copy and validation manifest.
 
-   # Step 1b — apply once the preview list looks correct.
-   powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 `
-       -TargetRepo D:\path\to\your-service-repo -Apply
+## Copy Into A Service Repo
 
-   # Step 1c — (optional) append local-only ignore rules.
-   powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 `
-       -TargetRepo D:\path\to\your-service-repo -Apply -IncludeLocalGitignoreRules
-   ```
-
-   The copy script never overwrites existing `AI_PRODUCT_SPEC.md`,
-   `AI_TASK_QUEUE.md`, or other control docs unless you explicitly pass
-   `-OverwriteControlDocs`. It never copies `ai-runs/<timestamp>/`, `.claude/`,
-   or `.git/`.
-
-2. **Validate the install.**
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 `
-       -TargetRepo D:\path\to\your-service-repo
-   ```
-
-   This reports `pass` / `warn` / `fail` per check and exits non-zero if a
-   required file is missing.
-
-3. **Fill in `AI_PRODUCT_SPEC.md`** with what the service is, who it serves,
-   what is in scope, what is out of scope, and how you will know the next
-   release is done.
-
-4. **Fill in `AI_TASK_QUEUE.md`** with at least one real task ID (e.g. `T-101`)
-   and a short title describing the change you want.
-
-5. **Run a `-DryRun` smoke test** from the target repo:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
-       -DryRun -Goal "service smoke test"
-   ```
-
-   This creates one timestamped folder under `ai-runs/`, collects redacted git
-   context, runs detection, and writes `AI_FINAL_HANDOFF.md`. It does **not**
-   invoke Codex, Claude, or tests.
-
-6. **Run unit-level safe tests** (still no Codex, still no Claude):
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
-       -TestLevel unit -Goal "unit validation"
-   ```
-
-7. **Generate the Codex prompt only** (still no Codex CLI invocation):
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
-       -Implementer codex -DryRun -Goal "Codex prompt only"
-   ```
-
-   This writes `codex-implementation-prompt.md` and a placeholder
-   `codex-output.md`. You can hand the prompt to Codex CLI yourself.
-
-8. **Generate the Claude review prompt only** (still no Claude invocation):
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
-       -Reviewer claude -DryRun -Goal "Claude review prompt only"
-   ```
-
-9. **Only later**, after you have manually confirmed your local Codex CLI and
-   Claude CLI accept the locked invocation patterns, try `-RunImplementer` and
-   `-RunReviewer`. See section B for the safe progression.
-
----
-
-## B. Recommended safe progression in a real service repo
-
-Move down the list one row at a time. Stop at the first failure and read
-`AI_FINAL_HANDOFF.md` before going further.
-
-| Order | Command shape                                                                | What it does                                                       |
-|-------|------------------------------------------------------------------------------|--------------------------------------------------------------------|
-| 1     | `-DryRun -Goal "..."`                                                        | Detect, collect, write handoff. No tests. No Codex. No Claude.     |
-| 2     | `-TestLevel unit -Goal "..."`                                                | Add safe local tests. No Codex. No Claude.                         |
-| 3     | `-Implementer codex -DryRun -Goal "..."`                                     | Generate the Codex prompt; do not run Codex.                       |
-| 4     | `-Reviewer claude -DryRun -Goal "..."`                                       | Generate the Claude review prompt; do not run Claude.              |
-| 5     | `-Implementer codex -RunImplementer -TestLevel unit -Goal "..."`             | One-shot Codex + unit tests. Still no Claude.                      |
-| 6     | `-Reviewer claude -RunReviewer -TestLevel unit -Goal "..."`                  | Run review-only Claude. Still no Codex.                            |
-| 7     | `-Implementer codex -RunImplementer -Reviewer claude -RunReviewer -TestLevel unit -Goal "..."` | One-shot Codex + Claude review (no fix loop yet).      |
-| 8     | Add `-EnableFixLoop -MaxIterations 2` (cap is 3)                             | Bounded Codex ↔ Claude fix loop. Conservative diff caps stay on.   |
-
-Do **not** start at row 8. The fix loop is only safe after you have personally
-verified rows 1–7 against your local CLI versions.
-
----
-
-## C. Example commands
-
-These are exact commands. Copy-paste, change the `-Goal`, and run.
+From the template repo, preview first:
 
 ```powershell
-# Phase 1 / 2 — safe defaults: no tests, no Codex, no Claude.
+powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 `
+    -TargetRepo D:\path\to\your-service-repo
+```
+
+Apply only after the preview looks correct:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 `
+    -TargetRepo D:\path\to\your-service-repo -Apply
+```
+
+Optionally append local ignore rules for generated artifacts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 `
+    -TargetRepo D:\path\to\your-service-repo -Apply -IncludeLocalGitignoreRules
+```
+
+The copy script does not copy `.git/`, `.claude/`, or timestamped `ai-runs/`
+folders. It does not delete files. It does not run git operations or dependency
+installers.
+
+## Validate The Install
+
+From the target repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -TargetRepo .
+```
+
+Optional dry-run smoke validation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -TargetRepo . -RunSmoke
+```
+
+`-RunSmoke` uses dry-run mode. It does not invoke Codex, invoke Claude, execute
+tests, install dependencies, commit, push, or deploy.
+
+## Recommended Safe Progression
+
+Move down this list one step at a time. Stop at the first confusing result and
+read `AI_FINAL_HANDOFF.md`.
+
+| Order | Command shape | What it does |
+| ----- | ------------- | ------------ |
+| 1 | `-DryRun -Goal "..."` | Collect context, detect tests, write handoff. No tests. No Codex. No Claude. |
+| 2 | `-TestLevel unit -Goal "..."` | Run conservative unit, lint, or typecheck commands. No Codex. No Claude. |
+| 3 | `-Implementer codex -DryRun -Goal "..."` | Generate a Codex prompt without running Codex. |
+| 4 | `-Reviewer claude -DryRun -Goal "..."` | Generate a Claude review prompt without running Claude. |
+| 5 | `-Implementer codex -RunImplementer -TestLevel unit -Goal "..."` | Run one Codex implementation attempt, then safe checks. |
+| 6 | `-Reviewer claude -RunReviewer -TestLevel unit -Goal "..."` | Run Claude review-only mode, then safe checks. |
+| 7 | `-Implementer codex -RunImplementer -Reviewer claude -RunReviewer -TestLevel unit -Goal "..."` | Run one Codex attempt plus Claude review. |
+| 8 | Add `-EnableFixLoop -MaxIterations 2` | Allow a bounded fix loop after the one-shot path is trusted. |
+
+Do not start with the bounded fix loop. Use it only after the one-shot
+implementer and reviewer paths are understood for the target repo.
+
+## Common Commands
+
+Dry-run smoke check:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
     -DryRun -Goal "service smoke test"
+```
 
-# Phase 2 — run safe unit-level tests only.
+Safe unit-level checks:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
     -TestLevel unit -Goal "unit validation"
+```
 
-# Phase 4 — generate the Codex prompt without invoking Codex CLI.
+Codex prompt-only mode:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
-    -Implementer codex -DryRun -Goal "Codex prompt only"
+    -Implementer codex -DryRun -Goal "Generate a Codex implementation prompt only"
+```
 
-# Phase 3 — generate the Claude review prompt without invoking Claude CLI.
+Claude prompt-only mode:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
-    -Reviewer claude -DryRun -Goal "Claude review prompt only"
+    -Reviewer claude -DryRun -Goal "Generate a Claude review prompt only"
+```
 
-# Phase 4 — actually run Codex CLI once (workspace-write sandbox), then unit tests.
+One-shot Codex execution:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
     -Implementer codex -RunImplementer -TestLevel unit -Goal "one-shot implementation"
+```
 
-# Phase 5 — bounded Codex <-> Claude fix loop, capped at 2 iterations.
+Claude review-only execution:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
+    -Reviewer claude -RunReviewer -TestLevel unit -Goal "review current changes"
+```
+
+Bounded fix loop:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
     -Implementer codex -RunImplementer `
     -Reviewer claude -RunReviewer `
-    -EnableFixLoop -MaxIterations 2 -TestLevel unit -Goal "bounded loop"
+    -EnableFixLoop -MaxIterations 2 -TestLevel unit -Goal "bounded fix loop"
 ```
 
-After every command, the artifacts you care about are:
+## Run Artifacts
 
-- `ai-runs/<timestamp>/AI_FINAL_HANDOFF.md` — read this last.
-- `ai-runs/<timestamp>/codex-output.md` (if Codex was requested).
-- `ai-runs/<timestamp>/claude-review.md` (if Claude was requested).
-- `ai-runs/<timestamp>/test-summary.json` and `test-output.txt`.
-- `ai-runs/<timestamp>/loop-summary.json` (only when `-EnableFixLoop` was set).
+Each harness run writes a timestamped folder under `ai-runs/`.
 
----
+Review these files first:
 
-## D. Safety explanation
+- `AI_FINAL_HANDOFF.md`
+- `test-summary.json`
+- `test-output.txt`
+- `codex-output.md`, when Codex was requested
+- `claude-review.md`, when Claude was requested
+- `loop-summary.json`, when the bounded fix loop was enabled
 
-The harness is intentionally boring on purpose. The following are **never**
-performed automatically:
+Do not commit timestamped `ai-runs/` folders. Keep only `ai-runs/.gitkeep`.
 
-- **No auto-commit.** `-AutoCommit` is refused with a clear message before any
-  run folder is created.
-- **No git push.** The harness never invokes `git push`, `git tag`, or any
-  remote operation.
-- **No deploy.** The harness never invokes a deploy command. It rejects any
-  command text containing the word `deploy`.
-- **No dependency install.** `npm install`, `pnpm install`, `yarn install`,
-  `pip install`, `poetry install`, `uv add`, etc. are blocked by a denylist.
-- **No destructive cleanup.** `rm -rf`, `Remove-Item -Recurse -Force` outside
-  the active run folder, `git reset --hard`, force pushes, and `git clean` are
-  all blocked.
-- **`ai-runs/` is ignored.** The repo's `.gitignore` ignores `ai-runs/*` while
-  preserving the tracked `ai-runs/.gitkeep` sentinel. Never commit
-  timestamped run folders.
-- **`.claude/` is ignored.** Local Claude Code CLI state is per-machine and is
-  excluded from version control.
-- **Human review is always required.** The handoff document never claims a
-  run is "done". The Result line surfaces what passed, what failed, and what
-  still needs human approval.
-- **`-DryRun` always wins.** It suppresses Codex execution, Claude execution,
-  and test execution even if `-RunImplementer`, `-RunReviewer`,
-  `-EnableFixLoop`, or `-TestLevel` are also set.
-- **Codex sandbox is locked.** Only `codex exec --sandbox workspace-write` is
-  used. `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`,
-  `--full-auto`, yolo, and bypass are never used.
-- **Claude review mode is locked.** Only `claude -p ... --output-format text
-  --tools ""` is used. `--dangerously-skip-permissions`, `acceptEdits`,
-  `bypassPermissions`, allowed-edit, and allowed-bash flags are never used.
-- **Phase 6 (this packaging layer) does not change any of the above.** The
-  copy script is preview-only by default, refuses to overwrite control docs
-  unless asked, and never runs git/install/delete.
+## Safety Model
 
----
+The harness never performs these actions on its own:
 
-## E. Troubleshooting
+- commit, push, tag, merge, or deploy,
+- dependency installation,
+- destructive cleanup,
+- permissive Codex sandbox modes,
+- Claude file-edit or shell-command tool grants,
+- automatic approval.
 
-### "The local Claude CLI rejects `--tools ""`"
+`-DryRun` always suppresses Codex execution, Claude execution, and test
+execution. Generated prompts and handoffs are for human review.
 
-If your local Claude Code CLI version does not accept `claude -p <prompt>
---output-format text --tools ""`, the harness writes a clear
-`Automatic Claude review could not be executed safely` message into
-`claude-review.md` and continues to the final handoff. **No alternative
-permissive Claude modes are attempted.** Hand the prompt
-(`claude-review-prompt.md`) to Claude yourself, then paste the response back
-into `claude-review.md` if you want it included in the handoff.
+## Troubleshooting
 
-### "The local Codex CLI rejects `--sandbox workspace-write`"
+### Claude CLI rejects the review-only flags
 
-Same pattern. The harness only attempts `codex exec --sandbox workspace-write
-<prompt>`. If your Codex CLI version does not accept that exact pattern,
-`codex-output.md` will say `Automatic Codex implementation could not be
-executed safely`, and the harness continues to the final handoff. **No
-permissive Codex modes are attempted.** You can hand
-`codex-implementation-prompt.md` to Codex yourself.
+The harness records that automatic Claude review could not be executed safely
+and continues to the final handoff. Do not switch to permissive Claude flags.
+Use the generated `claude-review-prompt.md` manually if needed.
 
-### "No tests found"
+### Codex CLI rejects the workspace-write sandbox
 
-`detect-tests.ps1` writes `noTestsFound: true` into `detected-tests.json` and
-the harness records a clear "no automated verification was available" message
-in the handoff Result line. This is never reported as success. Add at least
-one safe test command (typecheck, lint, or unit) to the target service repo
-and re-run.
+The harness records that automatic Codex implementation failed or was
+unsupported. Do not switch to permissive Codex sandbox flags. Use the generated
+`codex-implementation-prompt.md` manually if needed.
 
-### "MaxDiffStatLines exceeded" (fix-loop only)
+### No tests are found
 
-The bounded fix loop halts as soon as the cumulative diff insertions+deletions
-exceed `-MaxDiffStatLines` (default `120`). The Result line will say
-`fix loop halted by Phase 5 safety check (max-diff-stat-exceeded)`. This is
-intentional. Either narrow the task scope, raise the cap on the next
-invocation (e.g. `-MaxDiffStatLines 200`), or stop and review the diff by
-hand.
+The handoff reports that automated verification was unavailable. That is not a
+success result. Add or document safe local checks before relying on automated
+verification.
 
-### "MaxChangedFiles exceeded" (fix-loop only)
+### Diff or changed-file caps are exceeded
 
-Same shape, but for the cumulative changed-file count (default `12`). Either
-narrow scope or raise the cap on the next invocation.
+The bounded fix loop halts when the diff grows beyond configured caps. Narrow
+the task or review the diff by hand before raising limits.
 
-### "MaxIterations refused"
+### PowerShell blocks script execution
 
-`-MaxIterations` is hard-capped at `3`. Values `< 1` or `> 3` cause the
-script to abort cleanly with exit code `2` **before** any run folder is
-created. Use `-MaxIterations 2` or `-MaxIterations 3`.
+Use the per-invocation pattern shown in the examples:
 
-### "Cannot run scripts on this system" / Execution policy issues on Windows PowerShell
-
-If PowerShell refuses to run any of the scripts:
-
-```
-.\tools\ai-autopilot.ps1 : File ... cannot be loaded because running
-scripts is disabled on this system.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 ...
 ```
 
-Two safe options:
-
-1. **Per-invocation override (recommended):** every example in this guide
-   already starts with `powershell -ExecutionPolicy Bypass -File ...`. That
-   override applies only to that one invocation; nothing is changed
-   permanently.
-2. **Per-user override (if you control the machine):** open PowerShell and
-   run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Do **not** set
-   `Bypass` machine-wide.
-
-### "ai-runs is full / disk usage growing"
-
-`ai-runs/` is local-only and gitignored. You can delete entire timestamped
-folders inside `ai-runs/` whenever you want. Keep `ai-runs/.gitkeep`. Do not
-hand-edit a folder once a run is in progress.
-
-### "Copy preview shows files I do not want"
-
-Re-run `copy-template-to-service.ps1` without `-Apply` and read the preview
-output. Files originate from `TEMPLATE_MANIFEST.json`. To skip something
-template-side, fork the template; do not edit the manifest in the target.
-
-### "validate-template-install.ps1 reports a warning about `.gitignore`"
-
-Warnings are not failures. The validator warns when the target's `.gitignore`
-does not contain `ai-runs/*` and `.claude/` rules. Re-run the copy script
-with `-IncludeLocalGitignoreRules -Apply` to append them, or add them by hand.
+This does not change the machine-wide execution policy.
