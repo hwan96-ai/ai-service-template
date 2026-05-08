@@ -16,11 +16,13 @@ if (-not (Test-Path -LiteralPath $RunFolder)) {
 }
 
 $secretPatterns = @(
-    '(^|/)\.env(\.|$)',
-    '\.pem$',
-    '\.key$',
+    '(^|[\\/\s])\.env(\.[^\\/\s|]*)?($|[\\/\s|])',
+    '\.pem($|[\s|])',
+    '\.key($|[\s|])',
+    'credentials\.json',
     'secret',
-    'credentials'
+    'token',
+    'credential'
 )
 
 function Test-IsSecretLike {
@@ -85,11 +87,11 @@ $statusOut  = @(Invoke-GitStdoutOnly -GitArgs 'status --short')
 $statusExit = $LASTEXITCODE
 Write-FilteredLines -Path $statusPath -Lines $statusOut -FilterSecrets
 
-# git diff --stat (stdout only; no path filtering needed — stat lines include line counts, not contents)
+# git diff --stat (stdout only; secret-like paths redacted)
 $diffStatPath = Join-Path $RunFolder 'git-diff-stat.txt'
 $diffStatOut  = @(Invoke-GitStdoutOnly -GitArgs 'diff --stat')
 $diffStatExit = $LASTEXITCODE
-Write-FilteredLines -Path $diffStatPath -Lines $diffStatOut
+Write-FilteredLines -Path $diffStatPath -Lines $diffStatOut -FilterSecrets
 
 # git diff --name-only (stdout only; secret-like paths redacted)
 $diffNamesPath = Join-Path $RunFolder 'git-diff-names.txt'
@@ -102,5 +104,5 @@ $nameCount   = @($diffNamesOut | Where-Object { -not [string]::IsNullOrEmpty([st
 
 Write-Host ("[collect-context] git-status entries: {0} (exit={1})" -f $statusCount, $statusExit)
 Write-Host ("[collect-context] git-diff names: {0} (exit={1}, secret-like paths redacted)" -f $nameCount, $diffNamesExit)
-Write-Host ("[collect-context] git-diff stat exit: {0}" -f $diffStatExit)
+Write-Host ("[collect-context] git-diff stat exit: {0} (secret-like paths redacted)" -f $diffStatExit)
 Write-Host "[collect-context] artifacts written under $RunFolder"

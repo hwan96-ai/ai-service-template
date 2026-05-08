@@ -48,13 +48,15 @@ do not loosen the safety requirements without an explicit human decision.
 ## Test Detection And Optional Checks
 
 - [ ] Test detection produces human-readable and structured output.
-- [ ] Detected commands have a working directory, command text, level, safety
+- [ ] Detected commands have a working directory, command text, level, selection
   flag, and reason.
 - [ ] Commands outside the repo are rejected.
 - [ ] Install, destructive, git, and deploy commands are rejected by policy.
 - [ ] `-TestLevel none` runs no tests.
 - [ ] `-TestLevel unit` selects only conservative unit, lint, or typecheck
-  commands.
+  commands from trusted repositories.
+- [ ] Documentation states that wrapper command deny-lists do not guarantee that
+  trusted repository scripts are free of internal side effects.
 - [ ] If no tests are available, the handoff reports that automated
   verification was unavailable rather than treating the run as successful.
 
@@ -63,6 +65,8 @@ do not loosen the safety requirements without an explicit human decision.
 - [ ] Codex CLI is never invoked unless `-Implementer codex -RunImplementer`
   is provided and `-DryRun` is absent.
 - [ ] Codex runs use only `codex exec --sandbox workspace-write`.
+- [ ] Non-`workspace-write` `-CodexSandbox` values abort before any run folder
+  is created.
 - [ ] No permissive sandbox or approval-bypass flags are used.
 - [ ] Codex output, stderr, and exit code are captured in the run folder.
 - [ ] If Codex execution fails or is unsupported, the handoff says so clearly

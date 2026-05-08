@@ -8,8 +8,10 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host '=== validate-template-install (Phase 6) ==='
 
-# Phase 6: this script never modifies the target repo, never runs git add/commit/push,
-# never installs dependencies, never invokes Codex, never invokes Claude.
+# Phase 6: this script never modifies target source files, never runs
+# git add/commit/push, never installs dependencies, never invokes Codex, and
+# never invokes Claude. With -RunSmoke it writes local ai-runs/<timestamp>/
+# artifacts in the target repository.
 
 # ----- resolve target -----
 
@@ -21,6 +23,9 @@ if (-not (Test-Path -LiteralPath $TargetRepo)) {
 $resolvedTarget = (Resolve-Path -LiteralPath $TargetRepo).ProviderPath
 Write-Host ("[validate] Target repo: {0}" -f $resolvedTarget)
 Write-Host ("[validate] RunSmoke:    {0}" -f [bool]$RunSmoke)
+if ($RunSmoke) {
+    Write-Host '[validate] RunSmoke writes local ai-runs artifacts but does not modify source files.'
+}
 
 # ----- result tracking -----
 

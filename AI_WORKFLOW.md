@@ -13,7 +13,7 @@ CLIs, and it never approves work on its own.
 | PowerShell harness | Collects git context, detects tests, writes prompts, enforces safety checks, and writes the handoff. |
 | Codex CLI | Optional implementer, invoked only with explicit opt-in. |
 | Claude Code CLI | Optional reviewer, invoked only with explicit opt-in and review-only tooling. |
-| Local tests | Optional verification, selected conservatively by the harness. |
+| Local checks | Optional verification from trusted repository scripts; wrapper commands are checked, but script internals are not sandboxed by the harness. |
 
 ## Files To Customize First
 
@@ -46,7 +46,8 @@ Do not start from real AI execution. Start with dry-run and prompt-only modes.
    powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Claude review prompt only"
    ```
 
-7. Optionally run safe local checks with `-TestLevel unit`.
+7. Optionally run selected opt-in local checks from trusted repositories with
+   `-TestLevel unit`.
 8. Only after the prompts, checks, and CLI setup are trusted, opt in to
    `-RunImplementer`, `-RunReviewer`, or `-EnableFixLoop`.
 9. Review the final handoff and git diff by hand.
@@ -79,6 +80,9 @@ The harness is designed around conservative local defaults:
 - No raw secret material in collected context or prompts.
 - No timestamped `ai-runs/` artifacts in version control.
 - No automatic approval; every run ends with a human-reviewable handoff.
+- Selected local checks are trusted-repository scripts. The harness deny-lists
+  wrapper command text, but it cannot guarantee script internals have no side
+  effects.
 
 If a task appears to require breaking one of these rules, stop and handle the
 decision outside the harness.

@@ -19,6 +19,8 @@ during normal local AI-assisted development.
   output local-only and ignored by git.
 - Accidental secret exposure through collected context by avoiding secret-like
   files and raw secret material in prompts and summaries.
+- Secret-like paths in git status, diff name, and diff stat artifacts are
+  redacted before those artifacts are embedded into prompts or handoffs.
 
 These are guardrails, not absolute guarantees. A human should still review the
 goal text, generated prompts, diffs, test output, and final handoff before
@@ -35,6 +37,11 @@ continuing.
   descriptions.
 - Unsafe, overly broad, or secret-bearing task descriptions written by the
   human.
+- Trusted repository test scripts or wrappers that perform side effects
+  internally after their wrapper command text passes the harness deny-list.
+- Sensitive values printed by local checks, Codex, or Claude. Timestamped
+  `ai-runs/` artifacts may contain sensitive tool output if a trusted command or
+  CLI prints it.
 - Upstream Codex CLI or Claude Code CLI behavior changes that alter command
   semantics.
 
@@ -59,6 +66,11 @@ continuing.
 - You review script changes before updating the harness in a service repo.
 - Codex CLI and Claude Code CLI are installed from sources you trust and are kept
   current enough for the documented flags to behave as expected.
+- After updating Codex CLI or Claude Code CLI, you re-check compatibility of the
+  documented sandbox and review-only invocation patterns before relying on real
+  execution.
+- Selected local checks come from a trusted repository. The harness deny-lists
+  wrapper command text, but it does not sandbox the internals of those scripts.
 - Secrets are stored outside the repository and are not pasted into goals,
   prompts, task queues, or product specs.
 - A human remains responsible for reviewing diffs, test results, AI output,

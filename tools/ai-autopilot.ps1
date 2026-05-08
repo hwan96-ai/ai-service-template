@@ -35,6 +35,18 @@ $ErrorActionPreference = 'Stop'
 $TemplateVersion = '0.6.0'
 Write-Host ('=== ai-autopilot (Phase 6, TemplateVersion {0}) ===' -f $TemplateVersion)
 
+$LockedCodexSandbox = 'workspace-write'
+if ($CodexSandbox -cne $LockedCodexSandbox) {
+    $reason = 'Only the exact workspace-write sandbox is supported.'
+    if ($CodexSandbox -cmatch 'read-only') {
+        $reason = 'read-only contradicts the expected implementation workflow.'
+    } elseif ($CodexSandbox -match '(danger|bypass|yolo|full)') {
+        $reason = 'The requested value matches a refused permissive sandbox pattern.'
+    }
+    Write-Error ("CodexSandbox is locked to {0}. Refused value: '{1}'. {2} Aborting before any action." -f $LockedCodexSandbox, $CodexSandbox, $reason)
+    exit 2
+}
+
 # Phase 5 hard cap on MaxIterations. Refused BEFORE any run folder is created
 # and BEFORE any Codex/Claude process is spawned.
 $MaxIterationsCap = 3
@@ -919,6 +931,24 @@ function Invoke-ReviewIteration {
 
 # ---------------- diff observation helpers ----------------
 
+function Test-SecretLikePathText {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    $patterns = @(
+        '(^|[\\/\s])\.env(\.[^\\/\s|]*)?($|[\\/\s|])',
+        '\.pem($|[\s|])',
+        '\.key($|[\s|])',
+        'credentials\.json',
+        'secret',
+        'token',
+        'credential'
+    )
+    foreach ($pat in $patterns) {
+        if ($Text -match $pat) { return $true }
+    }
+    return $false
+}
+
 function Measure-DiffArtifacts {
     param([string]$Folder)
     # Returns @{ changedFiles, diffStatLines, hasSecretLikePaths }
@@ -936,7 +966,7 @@ function Measure-DiffArtifacts {
                 if ($t -match '\[redacted secret-like path\]') { $hasSecret = $true }
                 # Defense in depth: also flag explicit secret-shaped names that
                 # somehow slipped past collect-context's filter.
-                elseif ($t -match '(^|/)\.env(\.|$)' -or $t -match '\.pem$' -or $t -match '\.key$' -or $t -match 'secret' -or $t -match 'credentials') {
+                elseif (Test-SecretLikePathText $t) {
                     $hasSecret = $true
                 }
             }
@@ -947,6 +977,9 @@ function Measure-DiffArtifacts {
     if (Test-Path -LiteralPath $statPath) {
         $statText = Get-Content -LiteralPath $statPath -Raw -ErrorAction SilentlyContinue
         if (-not [string]::IsNullOrWhiteSpace($statText)) {
+            if ($statText -match '\[redacted secret-like path\]' -or (Test-SecretLikePathText $statText)) {
+                $hasSecret = $true
+            }
             $insertion = 0
             $deletion  = 0
             if ($statText -match '(\d+)\s+insertions?\(\+\)') { $insertion = [int]$matches[1] }

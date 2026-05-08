@@ -3,6 +3,7 @@
 
 $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath
 $script:AutopilotPath = Join-Path $script:RepoRoot 'tools\ai-autopilot.ps1'
+$script:CollectContextPath = Join-Path $script:RepoRoot 'tools\collect-context.ps1'
 $script:CopyScriptPath = Join-Path $script:RepoRoot 'tools\copy-template-to-service.ps1'
 $script:ManifestPath = Join-Path $script:RepoRoot 'TEMPLATE_MANIFEST.json'
 $script:GitignorePath = Join-Path $script:RepoRoot '.gitignore'
@@ -122,8 +123,24 @@ Describe 'AI Service Template safety guardrails' {
             -Arguments @('-MaxIterations', '4', '-Goal', 'self-test max iteration refusal')
 
         $result.ExitCode | Should Not Be 0
-        $result.Output | Should Match 'MaxIterations must be between 1 and 3'
+        $result.Output | Should Match 'MaxIterations must be between\s+1\s+and\s+3'
         (Test-Path -LiteralPath (Join-Path $work 'ai-runs')) | Should Be $false
+    }
+
+    It 'refuses non-workspace-write CodexSandbox values before creating run output' {
+        foreach ($sandbox in @('danger-full-access', 'read-only', 'bypass', 'yolo', 'full-auto', 'Workspace-write')) {
+            $work = New-SafetyTempDirectory -Name 'codex-sandbox'
+
+            $result = Invoke-ChildPowerShellScript `
+                -ScriptPath $script:AutopilotPath `
+                -WorkingDirectory $work `
+                -Arguments @('-CodexSandbox', $sandbox, '-Goal', 'self-test codex sandbox refusal')
+
+            $result.ExitCode | Should Not Be 0
+            $result.Output | Should Match 'CodexSandbox is locked to\s+workspace-?\s*write'
+            ($result.Output -replace '\s+', '') | Should Match ([regex]::Escape(($sandbox -replace '\s+', '')))
+            (Test-Path -LiteralPath (Join-Path $work 'ai-runs')) | Should Be $false
+        }
     }
 
     It 'keeps DryRun from invoking Codex or Claude even when run flags are present' -Skip:(-not $script:GitAvailable) {
@@ -159,6 +176,60 @@ Describe 'AI Service Template safety guardrails' {
         $claudeOutput | Should Match 'not executed - DryRun'
         $claudeOutput | Should Match 'refused to invoke Claude CLI'
         $handoff | Should Match 'Human review'
+    }
+
+    It 'redacts secret-like paths from git diff stat artifacts' -Skip:(-not $script:GitAvailable) {
+        $repo = New-SafetyTempDirectory -Name 'redaction-repo'
+        $runFolder = Join-Path $repo 'run-output'
+        New-Item -ItemType Directory -Path $runFolder -Force | Out-Null
+
+        $secretPaths = @(
+            '.env.local',
+            'keys/service.pem',
+            'config/api.key',
+            'config/service-secret.txt',
+            'config/token-cache.txt',
+            'config/credentials.json',
+            'config/service-credential.txt'
+        )
+
+        Push-Location -LiteralPath $repo
+        try {
+            & git init 2>&1 | Out-Null
+            & git config user.name 'Safety Test' 2>&1 | Out-Null
+            & git config user.email 'safety@example.invalid' 2>&1 | Out-Null
+
+            foreach ($relative in $secretPaths) {
+                $path = Join-Path $repo $relative
+                $parent = Split-Path -Parent $path
+                if (-not [string]::IsNullOrWhiteSpace($parent)) {
+                    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+                }
+                Set-Content -LiteralPath $path -Value 'placeholder value' -Encoding utf8
+            }
+
+            & git add -f . 2>&1 | Out-Null
+            & git commit -m 'baseline' 2>&1 | Out-Null
+
+            foreach ($relative in $secretPaths) {
+                Add-Content -LiteralPath (Join-Path $repo $relative) -Value 'changed value'
+            }
+
+            & $script:CollectContextPath -RunFolder $runFolder | Out-Null
+        } finally {
+            Pop-Location
+        }
+
+        $diffStat = Get-Content -LiteralPath (Join-Path $runFolder 'git-diff-stat.txt') -Raw
+        $diffNames = Get-Content -LiteralPath (Join-Path $runFolder 'git-diff-names.txt') -Raw
+        $status = Get-Content -LiteralPath (Join-Path $runFolder 'git-status.txt') -Raw
+
+        foreach ($artifactText in @($diffStat, $diffNames, $status)) {
+            $artifactText | Should Match '\[redacted secret-like path\]'
+            foreach ($fragment in @('.env.local', 'service.pem', 'api.key', 'service-secret.txt', 'token-cache.txt', 'credentials.json', 'service-credential.txt')) {
+                $artifactText | Should Not Match ([regex]::Escape($fragment))
+            }
+        }
     }
 
     It 'keeps the copy script preview-only by default' {
@@ -203,6 +274,22 @@ Describe 'AI Service Template safety guardrails' {
         $manifest.autoPush | Should Be $false
         $manifest.autoDeploy | Should Be $false
         $manifest.humanApprovalRequired | Should Be $true
+    }
+
+    It 'documents selected local checks as trusted-repository opt-in checks with script-internal limitations' {
+        $combinedDocs = @(
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'README.md') -Raw
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'TEMPLATE_USAGE.md') -Raw
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'AI_WORKFLOW.md') -Raw
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'AI_ACCEPTANCE_CRITERIA.md') -Raw
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'SECURITY.md') -Raw
+        ) -join [Environment]::NewLine
+
+        $combinedDocs | Should Match 'selected opt-in local checks from trusted repositories'
+        $combinedDocs | Should Match 'deny-lists wrapper command text'
+        $combinedDocs | Should Match 'cannot guarantee'
+        $combinedDocs | Should Match 'side effects'
+        $combinedDocs | Should Not Match 'safe tests'
     }
 
     It 'keeps generated run artifacts and Claude local state out of source control intent' {

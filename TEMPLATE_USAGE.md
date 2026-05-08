@@ -75,7 +75,10 @@ powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -
 `-RunSmoke` uses dry-run mode. It does not invoke Codex, invoke Claude, execute
 tests, install dependencies, commit, push, or deploy.
 
-## Recommended Safe Progression
+`-RunSmoke` does create local `ai-runs/<timestamp>/` artifacts in the target
+repo. It does not modify source files.
+
+## Recommended Progression
 
 Move down this list one step at a time. Stop at the first confusing result and
 read `AI_FINAL_HANDOFF.md`.
@@ -83,11 +86,11 @@ read `AI_FINAL_HANDOFF.md`.
 | Order | Command shape | What it does |
 | ----- | ------------- | ------------ |
 | 1 | `-DryRun -Goal "..."` | Collect context, detect tests, write handoff. No tests. No Codex. No Claude. |
-| 2 | `-TestLevel unit -Goal "..."` | Run conservative unit, lint, or typecheck commands. No Codex. No Claude. |
+| 2 | `-TestLevel unit -Goal "..."` | Run selected opt-in local checks from trusted repositories. No Codex. No Claude. |
 | 3 | `-Implementer codex -DryRun -Goal "..."` | Generate a Codex prompt without running Codex. |
 | 4 | `-Reviewer claude -DryRun -Goal "..."` | Generate a Claude review prompt without running Claude. |
-| 5 | `-Implementer codex -RunImplementer -TestLevel unit -Goal "..."` | Run one Codex implementation attempt, then safe checks. |
-| 6 | `-Reviewer claude -RunReviewer -TestLevel unit -Goal "..."` | Run Claude review-only mode, then safe checks. |
+| 5 | `-Implementer codex -RunImplementer -TestLevel unit -Goal "..."` | Run one Codex implementation attempt, then selected checks. |
+| 6 | `-Reviewer claude -RunReviewer -TestLevel unit -Goal "..."` | Run Claude review-only mode, then selected checks. |
 | 7 | `-Implementer codex -RunImplementer -Reviewer claude -RunReviewer -TestLevel unit -Goal "..."` | Run one Codex attempt plus Claude review. |
 | 8 | Add `-EnableFixLoop -MaxIterations 2` | Allow a bounded fix loop after the one-shot path is trusted. |
 
@@ -103,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
     -DryRun -Goal "service smoke test"
 ```
 
-Safe unit-level checks:
+Selected local checks:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 `
@@ -176,6 +179,10 @@ The harness never performs these actions on its own:
 `-DryRun` always suppresses Codex execution, Claude execution, and test
 execution. Generated prompts and handoffs are for human review.
 
+For selected local checks, the harness deny-lists unsafe wrapper command text.
+It cannot guarantee that trusted repository test scripts do not perform side
+effects internally.
+
 ## Troubleshooting
 
 ### Claude CLI rejects the review-only flags
@@ -193,8 +200,8 @@ unsupported. Do not switch to permissive Codex sandbox flags. Use the generated
 ### No tests are found
 
 The handoff reports that automated verification was unavailable. That is not a
-success result. Add or document safe local checks before relying on automated
-verification.
+success result. Add or document selected local checks from trusted repositories
+before relying on automated verification.
 
 ### Diff or changed-file caps are exceeded
 

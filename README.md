@@ -110,9 +110,9 @@ it makes their use more deliberate, reviewable, and repeatable.
 ## What The Harness Does
 
 - Copies reusable AI control documents and PowerShell scripts into a service repo
-- Collects safe git status and diff summaries without reading secret file contents
+- Collects redacted git status and diff summaries without reading secret file contents
 - Detects likely local test commands without installing dependencies
-- Runs selected safe tests only when requested
+- Runs selected opt-in local checks from trusted repositories only when requested
 - Generates Codex implementation prompts and can run Codex only with explicit opt-in
 - Generates Claude review prompts and can run Claude review-only only with explicit opt-in
 - Supports a bounded Codex and Claude fix loop when explicitly enabled
@@ -125,6 +125,7 @@ it makes their use more deliberate, reviewable, and repeatable.
 - It does not run Codex or Claude unless the matching run switches are provided
 - It does not commit, push, deploy, install dependencies, tag releases, or merge branches
 - It does not use `danger-full-access`, bypass, yolo, full-auto, or other permissive sandbox flags
+- It does not guarantee trusted repository test scripts are side-effect free; it deny-lists wrapper command text
 - It does not replace human review; it creates artifacts for human review
 
 ## Repository Layout
