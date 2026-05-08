@@ -50,6 +50,17 @@ codex --version
 claude --version
 ```
 
+## Self-Tests
+
+If Pester is already installed, run the safety self-tests without installing
+anything:
+
+```powershell
+Invoke-Pester -Path .\tests\AIServiceTemplate.Safety.Tests.ps1
+```
+
+The tests use temporary directories and do not invoke Codex CLI or Claude Code CLI.
+
 ## 2-Minute Quickstart
 
 Start with dry-run and prompt-only modes. These commands create local review artifacts, but they do not run real Codex or Claude, do not run tests, and do not commit, push, deploy, install dependencies, or use permissive sandbox flags.
