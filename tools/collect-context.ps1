@@ -36,31 +36,41 @@ function Invoke-GitStdoutOnly {
     # Run a git invocation through cmd.exe so its stderr is dropped at the
     # cmd-level redirection (2>NUL) and PowerShell only ever sees stdout.
     # Returns an array of stdout lines (possibly empty). $LASTEXITCODE is
-    # set to git's exit code.
+    # set to git's exit code. The leading comma forces PowerShell to preserve
+    # the wrapper array even when the inner result is empty, so callers do
+    # not silently receive $null when git produced no output.
     param([Parameter(Mandatory)][string]$GitArgs)
     $cmdLine = "git $GitArgs 2>NUL"
     $output = cmd.exe /c $cmdLine
-    if ($null -eq $output) { return @() }
-    return @($output)
+    if ($null -eq $output) { return ,@() }
+    if ($output -is [string]) { return ,@($output) }
+    return ,@($output)
 }
 
 function Write-FilteredLines {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Lines,
+        [Parameter()]
+        [AllowNull()]
+        [AllowEmptyCollection()]
+        [string[]]$Lines,
         [switch]$FilterSecrets
     )
-    $out = @()
+    # Treat $null and empty input identically — empty git output is normal,
+    # not an error. The output file is always written so downstream tooling
+    # (validate-template-install, write-final-handoff, fix-loop) can rely
+    # on its presence.
+    if ($null -eq $Lines) { $Lines = @() }
+    $out = New-Object System.Collections.Generic.List[string]
     foreach ($line in $Lines) {
         $text = [string]$line
         if ($FilterSecrets -and (Test-IsSecretLike $text)) {
-            $out += '[redacted secret-like path]'
+            [void]$out.Add('[redacted secret-like path]')
         } else {
-            $out += $text
+            [void]$out.Add($text)
         }
     }
     if ($out.Count -eq 0) {
-        # Always write at least an empty file so downstream tooling can rely on its presence.
         Set-Content -LiteralPath $Path -Value '' -Encoding utf8
     } else {
         ($out -join [Environment]::NewLine) | Out-File -FilePath $Path -Encoding utf8
@@ -68,20 +78,22 @@ function Write-FilteredLines {
 }
 
 # git status --short (stdout only; secret-like paths redacted)
+# Wrap each Invoke-GitStdoutOnly call in @(...) as belt-and-suspenders against
+# PowerShell array unwrap on assignment.
 $statusPath = Join-Path $RunFolder 'git-status.txt'
-$statusOut  = Invoke-GitStdoutOnly -GitArgs 'status --short'
+$statusOut  = @(Invoke-GitStdoutOnly -GitArgs 'status --short')
 $statusExit = $LASTEXITCODE
 Write-FilteredLines -Path $statusPath -Lines $statusOut -FilterSecrets
 
 # git diff --stat (stdout only; no path filtering needed — stat lines include line counts, not contents)
 $diffStatPath = Join-Path $RunFolder 'git-diff-stat.txt'
-$diffStatOut  = Invoke-GitStdoutOnly -GitArgs 'diff --stat'
+$diffStatOut  = @(Invoke-GitStdoutOnly -GitArgs 'diff --stat')
 $diffStatExit = $LASTEXITCODE
 Write-FilteredLines -Path $diffStatPath -Lines $diffStatOut
 
 # git diff --name-only (stdout only; secret-like paths redacted)
 $diffNamesPath = Join-Path $RunFolder 'git-diff-names.txt'
-$diffNamesOut  = Invoke-GitStdoutOnly -GitArgs 'diff --name-only'
+$diffNamesOut  = @(Invoke-GitStdoutOnly -GitArgs 'diff --name-only')
 $diffNamesExit = $LASTEXITCODE
 Write-FilteredLines -Path $diffNamesPath -Lines $diffNamesOut -FilterSecrets
 

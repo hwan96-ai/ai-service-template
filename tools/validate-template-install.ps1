@@ -194,6 +194,19 @@ if ($RunSmoke) {
         Add-Result -Name 'smoke run' -Status 'fail' -Detail 'tools/ai-autopilot.ps1 missing in target.'
         $smokeFailed = $true
     } else {
+        # Snapshot existing run folders so we can identify the new one created
+        # by the smoke run (rather than picking up an older folder if the
+        # autopilot fails before producing artifacts).
+        $runRoot = Join-Path $resolvedTarget 'ai-runs'
+        $preExistingRuns = @()
+        if (Test-Path -LiteralPath $runRoot) {
+            $preExistingRuns = @(
+                Get-ChildItem -LiteralPath $runRoot -Directory -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Name
+            )
+        }
+        $smokeStart = Get-Date
+
         # Invoke the smoke run in-process via the call operator so that arguments
         # containing spaces (e.g. -Goal "template install smoke test") are passed
         # verbatim. Start-Process -ArgumentList does not quote per-element values
@@ -201,6 +214,7 @@ if ($RunSmoke) {
         $prevLocation = Get-Location
         $prevLastExit = $global:LASTEXITCODE
         $global:LASTEXITCODE = 0
+        $exit = $null
         try {
             Set-Location -LiteralPath $resolvedTarget
             try {
@@ -222,6 +236,54 @@ if ($RunSmoke) {
         } finally {
             Set-Location -LiteralPath $prevLocation
             $global:LASTEXITCODE = $prevLastExit
+        }
+
+        # ----- smoke artifact verification -----
+        # Even if the autopilot exited 0, require that it produced a fresh
+        # ai-runs/<timestamp>/ folder containing the documented Phase 1+2+3
+        # artifacts. This catches regressions where collect-context.ps1 silently
+        # fails to write its outputs (the bug this validator hardening targets).
+        $smokeRunFolder = $null
+        if (Test-Path -LiteralPath $runRoot) {
+            $candidates = @(
+                Get-ChildItem -LiteralPath $runRoot -Directory -ErrorAction SilentlyContinue |
+                    Where-Object {
+                        $preExistingRuns -notcontains $_.Name -and $_.LastWriteTime -ge $smokeStart
+                    } |
+                    Sort-Object -Property LastWriteTime -Descending
+            )
+            if ($candidates.Count -gt 0) {
+                $smokeRunFolder = $candidates[0].FullName
+            }
+        }
+
+        if ($null -eq $smokeRunFolder) {
+            Add-Result -Name 'smoke run: created ai-runs/<timestamp>/' -Status 'fail' -Detail 'no new ai-runs subfolder was produced by the smoke run.'
+            $smokeFailed = $true
+        } else {
+            $relSmoke = $smokeRunFolder.Substring($resolvedTarget.Length).TrimStart('\','/')
+            Add-Result -Name 'smoke run: created ai-runs/<timestamp>/' -Status 'pass' -Detail $relSmoke
+
+            $expectedArtifacts = @(
+                'git-status.txt',
+                'git-diff-stat.txt',
+                'git-diff-names.txt',
+                'detected-tests.md',
+                'detected-tests.json',
+                'AI_FINAL_HANDOFF.md'
+            )
+            foreach ($artifact in $expectedArtifacts) {
+                $artifactPath = Join-Path $smokeRunFolder $artifact
+                if (Test-Path -LiteralPath $artifactPath) {
+                    # Empty content is acceptable (e.g. no changes in the target repo);
+                    # missing files are not. Per the bug report: collect-context.ps1
+                    # threw before writing git-diff-stat.txt and git-diff-names.txt.
+                    Add-Result -Name ("smoke artifact: {0}" -f $artifact) -Status 'pass'
+                } else {
+                    Add-Result -Name ("smoke artifact: {0}" -f $artifact) -Status 'fail' -Detail 'missing in latest ai-runs/<timestamp>/'
+                    $smokeFailed = $true
+                }
+            }
         }
     }
 } else {
