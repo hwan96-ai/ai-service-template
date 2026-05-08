@@ -19,5 +19,6 @@
 | T-003 | Add Phase 3 Claude review prompt and optional reviewer execution | done | Reviewer-only; no Codex/fix loop yet                                  |
 | T-004 | Add Phase 4 Codex one-shot implementation support           | done   | One-shot implementer only; no retry/fix loop yet                      |
 | T-005 | Add Phase 5 bounded Codex ↔ Claude fix loop                 | done   | Opt-in via -EnableFixLoop; capped at 3 iterations; loop never bypasses safety |
+| T-006 | Add Phase 6 template packaging and service onboarding support | done | Reuse support; no new Codex/Claude loop behavior. Adds README, TEMPLATE_USAGE, SERVICE_ONBOARDING_CHECKLIST, TEMPLATE_CHANGELOG, TEMPLATE_MANIFEST.json, copy-template-to-service.ps1 (preview-by-default), and validate-template-install.ps1 (`-RunSmoke` skips Codex/Claude/tests). Light-touch banner + TemplateVersion in autopilot / handoff. |
 
 <!-- Add new tasks above this line -->

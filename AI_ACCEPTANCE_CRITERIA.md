@@ -262,3 +262,67 @@ The loop must halt or stop on every one of the following:
 - Dependency installation.
 - Permissive Codex sandbox modes.
 - Embedding raw source diffs or secret material in the fix prompt.
+
+## Phase 6 — Packaging & reuse support
+
+The harness is "done" for Phase 6 when ALL of the following are true.
+
+### Packaging artifacts exist at repo root
+
+- [ ] `README.md` exists and explains what the template is, who it is for, the phases shipped, how to copy it into a service repo, what is safe by default, and what requires explicit opt-in.
+- [ ] `TEMPLATE_USAGE.md` exists and includes: a quick start for new service repos, a recommended safe progression, exact example commands for `-DryRun`, `-TestLevel unit`, `-Implementer codex -DryRun`, `-Reviewer claude -DryRun`, `-Implementer codex -RunImplementer`, and `-EnableFixLoop -MaxIterations 2`, a safety explanation, and a troubleshooting section covering Claude / Codex CLI flag mismatches, no tests found, `MaxDiffStatLines` exceeded, `MaxChangedFiles` exceeded, `MaxIterations` refused, and PowerShell execution policy issues.
+- [ ] `SERVICE_ONBOARDING_CHECKLIST.md` exists and is written for a non-developer with sections for: before copying, files to copy, files to customise, first smoke tests, Codex CLI verification, Claude CLI verification, safe first real run, what not to commit, and when to stop and ask for help.
+- [ ] `TEMPLATE_CHANGELOG.md` exists with entries for Phase 1 (`eaaba00`), Phase 2 (`4a5c9ce`), Phase 3 (`5b02bef`), Phase 4 (`645dc4a`), Phase 5 (`bad710b`), and Phase 6 (commit id deliberately not fabricated; marked unreleased).
+- [ ] `TEMPLATE_MANIFEST.json` exists, parses as valid JSON, and includes at least the keys `templateName`, `templateVersion`, `phasesImplemented`, `requiredFiles`, `toolFiles`, `localArtifactPatterns`, `forbiddenByDefault`, `recommendedFirstCommands`, `copyScript`, and `validationScript`. `templateVersion` is `"0.6.0"` and `phasesImplemented` is `[1, 2, 3, 4, 5, 6]`.
+
+### Copy script (`tools/copy-template-to-service.ps1`)
+
+- [ ] The script declares `[Parameter(Mandatory)] [string]$TargetRepo`, `[switch]$Apply`, `[switch]$OverwriteControlDocs`, and `[switch]$IncludeLocalGitignoreRules`.
+- [ ] Without `-Apply`, the script is preview-only: it prints the planned actions and exits without writing any file.
+- [ ] The script aborts cleanly when `$TargetRepo` does not exist.
+- [ ] The script aborts cleanly when `$TargetRepo` is not a git repository (no `.git` directory).
+- [ ] The script refuses to copy onto itself (template path equals target path).
+- [ ] The script copies only files listed in `TEMPLATE_MANIFEST.json` (`requiredFiles + toolFiles + sentinelFiles`).
+- [ ] The script never copies `.git/`, `.claude/`, or any timestamped folder under `ai-runs/`.
+- [ ] The script preserves existing `AI_PRODUCT_SPEC.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AI_TASK_QUEUE.md`, `AI_WORKFLOW.md`, `AGENTS.md`, and `CLAUDE.md` in the target unless `-OverwriteControlDocs` is explicitly passed.
+- [ ] The script creates the target's `tools/` directory if missing and ensures `ai-runs/.gitkeep` exists in the target.
+- [ ] When `-IncludeLocalGitignoreRules` is set, the script appends `ai-runs/*`, `!ai-runs/.gitkeep`, and `.claude/` rules to the target `.gitignore` only if those rules are not already present.
+- [ ] The script never invokes `git add`, `git commit`, `git push`, deploy commands, or dependency installers.
+- [ ] The script never deletes files.
+
+### Validation script (`tools/validate-template-install.ps1`)
+
+- [ ] The script declares `[string]$TargetRepo = '.'` and `[switch]$RunSmoke`.
+- [ ] Each entry in `TEMPLATE_MANIFEST.json` → `requiredFiles` is checked for existence in the target; missing entries cause a `fail`.
+- [ ] Each entry in `TEMPLATE_MANIFEST.json` → `toolFiles` is checked for existence in the target; missing entries cause a `fail`.
+- [ ] `ai-runs/.gitkeep` is checked for existence; missing causes a `fail`.
+- [ ] `.gitignore` is checked for `ai-runs/*` and `.claude/` rules; missing rules produce a `warn` (not a `fail`).
+- [ ] The target is checked for being a git repository (`.git` present); missing causes a `fail`.
+- [ ] `tools/ai-autopilot.ps1`, `tools/copy-template-to-service.ps1`, `tools/validate-template-install.ps1`, `tools/write-final-handoff.ps1`, `tools/collect-context.ps1`, and `tools/detect-tests.ps1` are tokenised via `[System.Management.Automation.PSParser]::Tokenize`; parse failures cause a `fail`.
+- [ ] When `-RunSmoke` is passed, the script invokes `tools/ai-autopilot.ps1 -DryRun -Goal "template install smoke test"` from the target repo. It does NOT invoke Codex, does NOT invoke Claude, and does NOT execute tests.
+- [ ] The script prints a `pass / warn / fail / skip` summary.
+- [ ] The script exits `0` when all required checks pass; exits `1` when any required file is missing or the `-RunSmoke` run fails.
+- [ ] The script never modifies the target repo, never runs `git add`, `git commit`, `git push`, deploy commands, or dependency installers.
+
+### Phase 6 safety (carried over)
+
+- [ ] `-AutoCommit` remains refused in `tools/ai-autopilot.ps1` before any run folder is created.
+- [ ] No `git commit`, `git push`, `git tag`, deploy command, or dependency install is executed by any Phase 6 script.
+- [ ] No real Codex CLI invocation is performed by `tools/copy-template-to-service.ps1` or `tools/validate-template-install.ps1`.
+- [ ] No real Claude CLI invocation is performed by `tools/copy-template-to-service.ps1` or `tools/validate-template-install.ps1`.
+- [ ] Phase 6 does not change Codex / Claude / fix-loop behaviour beyond the optional `TemplateVersion` reporting in `goal.txt` and the final handoff Parameters block.
+- [ ] Phase 6 does not modify `tools/detect-tests.ps1`, `tools/collect-context.ps1`, `tools/write-codex-implementation-prompt.ps1`, `tools/write-codex-fix-prompt.ps1`, or `tools/write-claude-review-prompt.ps1`.
+- [ ] Phase 6 does not modify `.gitignore` or `AI_PRODUCT_SPEC.md`.
+- [ ] Phase 1, Phase 2, Phase 3, Phase 4, and Phase 5 smoke tests still pass without changes to detection, context-collection, prompt-writer, or fix-loop scripts.
+- [ ] No file outside the Phase 6 allowed list (see `AGENTS.md` / `CLAUDE.md`) is created or modified by the Phase 6 implementation.
+
+## Out of Scope for Phase 6
+
+- Any new Codex or Claude loop capability.
+- Real Codex CLI execution from the packaging scripts.
+- Real Claude CLI execution from the packaging scripts.
+- Auto-commit, auto-push, auto-deploy, auto-tag, auto-merge.
+- Dependency installation by the harness or the packaging scripts.
+- Network calls beyond what already exists in Phases 1–5.
+- Creating `package.json` or any lockfile.
+- Modifying source / test / config files outside this template.

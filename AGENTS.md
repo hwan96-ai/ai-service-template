@@ -86,6 +86,29 @@ tools/write-codex-fix-prompt.ps1
 
 Phase 5 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
 
+## Phase 6 allowed files
+
+```
+AI_ACCEPTANCE_CRITERIA.md
+AI_TASK_QUEUE.md
+AI_WORKFLOW.md
+AGENTS.md
+CLAUDE.md
+README.md
+TEMPLATE_USAGE.md
+TEMPLATE_CHANGELOG.md
+SERVICE_ONBOARDING_CHECKLIST.md
+TEMPLATE_MANIFEST.json
+tools/copy-template-to-service.ps1
+tools/validate-template-install.ps1
+tools/ai-autopilot.ps1
+tools/write-final-handoff.ps1
+```
+
+`tools/copy-template-to-service.ps1` and `tools/validate-template-install.ps1` are the only new files Phase 6 introduces. `tools/ai-autopilot.ps1` and `tools/write-final-handoff.ps1` may receive **light-touch** edits only — version banner / `TemplateVersion` parameter / Parameters-block line. No logic changes.
+
+Phase 6 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `tools/write-codex-implementation-prompt.ps1`, `tools/write-codex-fix-prompt.ps1`, `tools/write-claude-review-prompt.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
+
 If a task appears to require modifying a file outside the allowed list for the current phase, **stop and report**. Do not silently expand scope.
 
 ## Phase 2 guardrails
@@ -135,6 +158,20 @@ If a task appears to require modifying a file outside the allowed list for the c
 - Auto-commit, auto-push, auto-deploy, auto-tag, auto-merge, and dependency installation all remain forbidden in every iteration.
 - Human approval is still required when the loop ends. The harness will not approve, commit, push, or deploy on its own.
 - Per-iteration files (`iteration-XX-summary.md`, `iteration-XX-decision.json`, optional `iteration-XX-codex-output.md`, `iteration-XX-test-summary.json`, `iteration-XX-claude-review.md`) and the top-level latest-iteration snapshots are local-only `ai-runs/<timestamp>/` artifacts. They must not be committed or hand-edited.
+
+## Phase 6 guardrails
+
+- Phase 6 is **packaging only**. Codex's role does not change: Codex remains a Phase 4 / 5 implementer driven only by `-Implementer codex -RunImplementer` (and optionally `-EnableFixLoop`). The Phase 6 packaging scripts (`tools/copy-template-to-service.ps1`, `tools/validate-template-install.ps1`) must never invoke Codex CLI under any circumstance.
+- The Phase 6 packaging scripts must never invoke Claude Code CLI under any circumstance, even when running `-RunSmoke`.
+- `tools/copy-template-to-service.ps1` is **preview-only without `-Apply`**. The default invocation must print the planned actions and exit without writing any file.
+- The copy script must never overwrite existing `AI_PRODUCT_SPEC.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AI_TASK_QUEUE.md`, `AI_WORKFLOW.md`, `AGENTS.md`, or `CLAUDE.md` in the target unless the human explicitly passes `-OverwriteControlDocs`. Codex must not silently widen this default.
+- The copy script must never copy `.git/`, `.claude/`, or any timestamped folder under `ai-runs/`. Generated artifacts stay local.
+- `tools/validate-template-install.ps1` must never modify the target repository, must never run `git add`, `git commit`, `git push`, deploy commands, or dependency installers, and must not execute tests except through the locked `ai-autopilot.ps1 -DryRun` smoke pattern.
+- `-AutoCommit` remains refused before any run folder is created.
+- `git commit`, `git push`, `git tag`, deploy operations, and dependency installation remain forbidden in every Phase 6 path, including inside the copy script and the validator.
+- Network calls remain at the level allowed in Phases 1–5. Phase 6 introduces none.
+- Human approval is **still** required after every harness run. The Phase 6 packaging path does not change the final-handoff approval gate.
+- Generated `ai-runs/<timestamp>/` artifacts are local-only and must not be committed or hand-edited.
 
 ## Hard rules
 

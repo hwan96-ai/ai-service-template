@@ -1,0 +1,162 @@
+# TEMPLATE_CHANGELOG.md
+
+Phase-by-phase changelog for the AI service template. Commit ids reference
+this template repository's history.
+
+> **Current template version:** `0.6.0`
+>
+> Versioning is informational only. Each phase keeps every prior phase's
+> safety guarantees intact.
+
+## 0.6.0 — Phase 6: packaging and reuse support (unreleased)
+
+Commit id: *(not assigned — Phase 6 commit will be made by the human after
+review.)*
+
+Added:
+
+- `README.md` — practical template overview, who/what, how to copy, safety
+  summary.
+- `TEMPLATE_USAGE.md` — main user guide: quick start, safe progression,
+  example commands, safety, troubleshooting.
+- `SERVICE_ONBOARDING_CHECKLIST.md` — non-developer checklist for applying
+  the template to a real service repo.
+- `TEMPLATE_CHANGELOG.md` — this file.
+- `TEMPLATE_MANIFEST.json` — machine-readable manifest of required files,
+  tool files, local artifact patterns, forbidden behaviours, and the
+  recommended safe-progression command list.
+- `tools/copy-template-to-service.ps1` — preview-by-default copier; only
+  copies files listed in `TEMPLATE_MANIFEST.json`; refuses to overwrite
+  control documents unless `-OverwriteControlDocs` is explicitly passed;
+  never copies `ai-runs/<timestamp>/`, `.claude/`, or `.git/`; never invokes
+  git, never installs dependencies, never deletes files.
+- `tools/validate-template-install.ps1` — install validator with a
+  `-RunSmoke` switch that runs `ai-autopilot.ps1 -DryRun -Goal "template
+  install smoke test"` without invoking Codex or Claude; checks required
+  control documents, tool files, `ai-runs/.gitkeep`, `.gitignore` rules
+  (warn-only), git repo state, and PowerShell parser-tokenises key scripts.
+
+Updated (light-touch only):
+
+- `AI_WORKFLOW.md` — added Phase 6 "Packaging and reuse" section.
+- `AI_ACCEPTANCE_CRITERIA.md` — added Phase 6 acceptance criteria block.
+- `AI_TASK_QUEUE.md` — added `T-006` row.
+- `AGENTS.md` — added Phase 6 allowed-files list and Phase 6 guardrails.
+- `CLAUDE.md` — added Phase 6 allowed-files list and Phase 6 guardrails.
+- `tools/ai-autopilot.ps1` — version banner reads `Phase 6`; `goal.txt`
+  records `TemplateVersion: 0.6.0`. No logic changes; Codex / Claude / fix
+  loop behaviour is unchanged.
+- `tools/write-final-handoff.ps1` — accepts an optional `-TemplateVersion`
+  parameter (default `0.6.0`) and prints it in the Parameters block;
+  Autopilot Phase line reads `Phase 6`. No logic changes.
+
+Phase 6 deliberately does **not** add or change any Codex, Claude, or
+fix-loop behaviour. It only makes the template safe to **reuse** across
+service repos.
+
+## 0.5.0 — Phase 5: bounded Codex ↔ Claude fix loop scaffolding
+
+Commit id: `bad710b chore: add Phase 5 bounded fix loop scaffolding`.
+
+Added:
+
+- `tools/write-codex-fix-prompt.ps1` — fix-only Codex prompt for iterations
+  2+. Embeds only failed-test summaries, parsed Claude blocking /
+  requested-changes excerpts, and summary git context. No raw diffs, no
+  source contents, no secrets, no broader scope.
+- `-EnableFixLoop`, `-FixTrigger {tests | claude | tests-or-claude}`,
+  `-MaxChangedFiles 12`, `-MaxDiffStatLines 120`, and `-MaxIterations` cap
+  of `3`. All defaults are off / conservative.
+- Per-iteration artifacts (`iteration-XX-summary.md`,
+  `iteration-XX-decision.json`, optional `iteration-XX-codex-output.md`,
+  `iteration-XX-test-summary.json`, `iteration-XX-claude-review.md`) and a
+  top-level `loop-summary.json`.
+
+Stop conditions: Claude verdict `approve` → stop; verdict `block` → halt;
+changed-file count exceeds `-MaxChangedFiles` → halt; diff insertions+
+deletions exceed `-MaxDiffStatLines` → halt; secret-like paths appear in
+the changed-file list → halt; same failure fingerprint repeats across
+consecutive iterations → halt; iteration budget exhausted → stop.
+
+Auto-commit, auto-push, auto-deploy, auto-tag, auto-merge, and dependency
+installation remain forbidden in every iteration. Codex sandbox stays
+locked at `workspace-write`; no permissive flags are ever introduced.
+
+## 0.4.0 — Phase 4: Codex one-shot implementation support
+
+Commit id: `645dc4a chore: add Phase 4 Codex one-shot implementation support`.
+
+Added:
+
+- `tools/write-codex-implementation-prompt.ps1` — generates
+  `codex-implementation-prompt.md` summarising the active goal / task,
+  acceptance criteria, allowed files for the current phase, and a
+  controlled context bundle (no raw diffs, no source contents, no secrets).
+- `-Implementer codex`, `-RunImplementer`, `-CodexCommand`, `-CodexSandbox`,
+  `-CodexRunMode` switches.
+- One-shot only: when `-RunImplementer` is set (and `-DryRun` is not), the
+  harness invokes `codex exec --sandbox workspace-write <prompt>` exactly
+  once. No automatic retry. No follow-up Codex or Claude calls.
+- Permissive Codex flags (`danger-full-access`,
+  `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo,
+  bypass) are never used.
+- Auto-commit, push, deploy, and dependency installation remain forbidden.
+
+## 0.3.0 — Phase 3: Claude review prompt support
+
+Commit id: `5b02bef chore: add Phase 3 Claude review prompt support`.
+
+Added:
+
+- `tools/write-claude-review-prompt.ps1` — generates
+  `claude-review-prompt.md` requesting a structured response with
+  `Verdict`, `Summary`, `Blocking Issues`, `Non-blocking Issues`,
+  `Test Assessment`, `Safety Assessment`, `Suggested Fix Prompt For Codex`,
+  `Approval Readiness`, and `Suggested Commit Message` sections.
+- `-Reviewer claude`, `-RunReviewer`, `-ClaudeCommand`, `-ClaudeReviewMode`
+  switches.
+- Reviewer-only execution: even with `-RunReviewer`, the harness uses
+  `claude -p <prompt> --output-format text --tools ""`. Permissive flags
+  (`--dangerously-skip-permissions`, `acceptEdits`, `bypassPermissions`,
+  allowed-edit, allowed-bash) are never used. No alternative permissive
+  modes are attempted on failure.
+- The handoff Result line is verdict-aware (`approve` / `request_changes` /
+  `block`).
+
+## 0.2.0 — Phase 2: test detection and execution reporting
+
+Commit id: `4a5c9ce chore: add Phase 2 test detection and execution reporting`.
+
+Added:
+
+- `tools/detect-tests.ps1` — writes `detected-tests.md` and structured
+  `detected-tests.json` (with `repoRoot`, `detectedStacks`, `testCommands`,
+  `warnings`, `noTestsFound`). Detection covers Node (npm/pnpm), Python
+  (`pyproject.toml`/`pytest.ini`/`requirements.txt`/`tests/`), Playwright,
+  and split repos (`frontend/`, `backend/`).
+- `-TestLevel none|unit|integration|e2e|all` and `-SkipE2E` switches on
+  `ai-autopilot.ps1`. The default `-TestLevel none` keeps execution off.
+- Per-command denylist for installs (`npm install`, `pip install`, …),
+  destructive ops (`rm -rf`, `Remove-Item -Recurse`, `git reset --hard`,
+  `git clean`), git mutations (`git push`, `git commit`), and `deploy`.
+- `test-output.txt` and `test-summary.json` are always produced, even when
+  no commands run.
+- Run folders gained millisecond precision (`yyyyMMdd-HHmmss-fff`) and
+  optional collision suffixes; existing folders are never overwritten.
+
+## 0.1.0 — Phase 1: harness foundation
+
+Commit id: `eaaba00 chore: add safe local AI automation harness foundation`.
+
+Added:
+
+- Control documents at the repo root: `AI_PRODUCT_SPEC.md`,
+  `AI_ACCEPTANCE_CRITERIA.md`, `AI_TASK_QUEUE.md`, `AI_WORKFLOW.md`,
+  `AGENTS.md`, `CLAUDE.md`.
+- `tools/ai-autopilot.ps1`, `tools/collect-context.ps1`,
+  `tools/write-final-handoff.ps1`, and an early `tools/detect-tests.ps1`
+  stub.
+- `ai-runs/.gitkeep` plus `.gitignore` rules ignoring `ai-runs/*` while
+  preserving the sentinel.
+- Hard refusal of `-AutoCommit`. No git commit, push, deploy, or
+  dependency installation is performed in any phase.

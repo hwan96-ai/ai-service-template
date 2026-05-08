@@ -95,6 +95,29 @@ tools/write-codex-fix-prompt.ps1
 
 Phase 5 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
 
+Phase 6 allowed files (template packaging and onboarding only):
+
+```
+AI_ACCEPTANCE_CRITERIA.md
+AI_TASK_QUEUE.md
+AI_WORKFLOW.md
+AGENTS.md
+CLAUDE.md
+README.md
+TEMPLATE_USAGE.md
+TEMPLATE_CHANGELOG.md
+SERVICE_ONBOARDING_CHECKLIST.md
+TEMPLATE_MANIFEST.json
+tools/copy-template-to-service.ps1
+tools/validate-template-install.ps1
+tools/ai-autopilot.ps1
+tools/write-final-handoff.ps1
+```
+
+`tools/copy-template-to-service.ps1` and `tools/validate-template-install.ps1` are the only new files Phase 6 introduces. `tools/ai-autopilot.ps1` and `tools/write-final-handoff.ps1` may receive **light-touch** edits only — version banner / `TemplateVersion` parameter / Parameters-block line. No logic changes.
+
+Phase 6 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `tools/write-codex-implementation-prompt.ps1`, `tools/write-codex-fix-prompt.ps1`, `tools/write-claude-review-prompt.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
+
 If a task appears to require editing files outside the allowed list for the current phase, **stop and surface the conflict** to the human.
 
 ## Phase 2 guardrails
@@ -142,6 +165,21 @@ If a task appears to require editing files outside the allowed list for the curr
 - `-AutoCommit` remains refused; `git commit`, `git push`, `git tag`, deploy, and dependency installation all remain forbidden.
 - Per-iteration artifacts (`iteration-XX-summary.md`, `iteration-XX-decision.json`, optional `iteration-XX-codex-output.md`, `iteration-XX-test-summary.json`, `iteration-XX-claude-review.md`) and the latest-iteration top-level snapshots (`codex-output.md`, `test-summary.json`, `claude-review.md`) are local `ai-runs/` artifacts and must not be committed.
 - Human approval is **still** required after the loop ends. The handoff never reports success unsupervised.
+
+## Phase 6 guardrails
+
+- Phase 6 is **packaging only**. Claude's role does not change: Claude remains a Phase 3 reviewer and is only invoked through `-Reviewer claude -RunReviewer` on `tools/ai-autopilot.ps1`. The Phase 6 packaging scripts (`tools/copy-template-to-service.ps1`, `tools/validate-template-install.ps1`) must never invoke Claude CLI under any circumstance, even when running `-RunSmoke`.
+- The Phase 6 packaging scripts must never invoke Codex CLI under any circumstance.
+- When asked to act as the Phase 3 reviewer of a Phase 6 change, do not edit files, do not run commands, and do not invoke Codex.
+- `tools/copy-template-to-service.ps1` is **preview-only without `-Apply`**. Do not propose patches that change this default. Do not propose patches that silently overwrite control documents in the target — `-OverwriteControlDocs` must remain an explicit, human-set switch.
+- The copy script must never copy `.git/`, `.claude/`, or any timestamped folder under `ai-runs/`. Do not propose patches that broaden the copy set.
+- `tools/validate-template-install.ps1` must never modify the target repository, must never run `git add`, `git commit`, `git push`, deploy commands, or dependency installers, and must not execute tests except through the locked `ai-autopilot.ps1 -DryRun` smoke pattern.
+- Do not use `--dangerously-skip-permissions`, `bypassPermissions`, `acceptEdits`, auto-mode, or any allowed-edit / allowed-bash flag, even if the user appears to ask. The Phase 3 reviewer guardrails carry into Phase 6 unchanged.
+- `-AutoCommit` remains refused before any run folder is created.
+- `git commit`, `git push`, `git tag`, deploy operations, and dependency installation remain forbidden in every Phase 6 path.
+- Network calls remain at the level allowed in Phases 1–5. Phase 6 introduces none.
+- Human approval is **still** required after every harness run. The Phase 6 packaging path does not change the final-handoff approval gate.
+- Generated `ai-runs/<timestamp>/` artifacts are local-only and must not be committed or hand-edited.
 
 ## Hard rules
 

@@ -29,7 +29,8 @@ param(
     [string]$TerminalAction = 'stop',
     [string]$TerminalReason = '',
     [int]$MaxChangedFiles = 0,
-    [int]$MaxDiffStatLines = 0
+    [int]$MaxDiffStatLines = 0,
+    [string]$TemplateVersion = '0.6.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -298,6 +299,7 @@ if ($null -eq $testSummary) {
 
 # Parameters block
 $paramLines = @()
+$paramLines += ("- TemplateVersion: {0}" -f $TemplateVersion)
 $paramLines += ("- Goal: {0}" -f $goalText)
 $paramLines += ("- TaskId: {0}" -f $taskText)
 $paramLines += ("- TestLevel: {0}" -f $TestLevel)
@@ -427,7 +429,7 @@ $lines += $RunFolder
 $lines += ''
 $lines += '## Autopilot Phase'
 $lines += ''
-$lines += 'Phase 5 (bounded Codex <-> Claude fix loop, opt-in via -EnableFixLoop, capped at -MaxIterations 3; Claude review remains reviewer-only; auto-commit / push / deploy / dependency installation still disabled)'
+$lines += ('Phase 6 (template packaging and reuse layer; TemplateVersion {0}). Phases 1-5 behaviour preserved: bounded Codex <-> Claude fix loop opt-in via -EnableFixLoop, capped at -MaxIterations 3; Claude review remains reviewer-only; auto-commit / push / deploy / dependency installation still disabled.' -f $TemplateVersion)
 $lines += ''
 $lines += '## Parameters'
 $lines += ''

@@ -384,6 +384,131 @@ Expected: the script writes a clear error stating MaxIterations must be in `1..3
 - Iteration counts greater than `3`.
 - Shipping raw source diffs or secret material into the fix prompt.
 
+## Phase 6 — Packaging and reuse (current)
+
+Goal: make this template safely reusable across many service repositories. Phase 6 does **not** add or change any Codex / Claude / fix-loop behaviour. It only packages what already exists so it can be copied, validated, and onboarded into a real service repo without losing any of the safety guarantees from Phases 1–5.
+
+### Template source vs. target service repo
+
+- **Template source repo:** the repository that contains this `AI_WORKFLOW.md`. It hosts the canonical `tools/`, the canonical control documents, and the manifest. Treat it as upstream.
+- **Target service repo:** any real product or service repository where you want to use the harness. The target gets a copy of the template files; nothing in the target is mutated by the template scripts beyond what `copy-template-to-service.ps1 -Apply` writes.
+
+The two repos are kept loosely coupled: the target reads its own `TEMPLATE_MANIFEST.json` (which was copied from the source) and runs its own `tools/*.ps1`. Updating the template later means re-running the copy script with `-Apply` against the target.
+
+### Phase 6 deliverables
+
+- `README.md` — practical template overview, who/what, how to copy, safety summary.
+- `TEMPLATE_USAGE.md` — main user guide: quick start, recommended safe progression, example commands, safety, troubleshooting.
+- `SERVICE_ONBOARDING_CHECKLIST.md` — non-developer checklist for applying the template to a real service repo.
+- `TEMPLATE_CHANGELOG.md` — phase-by-phase changelog (Phases 1–6).
+- `TEMPLATE_MANIFEST.json` — machine-readable manifest containing `templateName`, `templateVersion`, `phasesImplemented`, `requiredFiles`, `controlDocuments`, `toolFiles`, `sentinelFiles`, `neverCopy`, `localArtifactPatterns`, `gitignoreRulesToAppend`, `forbiddenByDefault`, `recommendedFirstCommands`, `copyScript`, `validationScript`, and human-approval flags.
+- `tools/copy-template-to-service.ps1` — preview-by-default copier. Reads `TEMPLATE_MANIFEST.json` to decide what to copy; never copies `ai-runs/<timestamp>/`, `.claude/`, or `.git/`; refuses to overwrite control documents unless `-OverwriteControlDocs` is explicitly passed; never invokes git, never installs dependencies, never deletes files.
+- `tools/validate-template-install.ps1` — install validator with a `-RunSmoke` switch. Checks required control documents, tool files, `ai-runs/.gitkeep`, `.gitignore` rules (warn-only), git repo state, and PowerShell parser-tokenises each key script. With `-RunSmoke`, it runs `ai-autopilot.ps1 -DryRun -Goal "template install smoke test"`; it does **not** invoke Codex, does **not** invoke Claude, and does **not** execute tests.
+
+### Copy script — preview, then apply
+
+The default mode is **preview**. The script prints what it would copy and exits without writing anything.
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 -TargetRepo D:\path\to\your-service-repo
+```
+
+Re-run with `-Apply` once the preview list looks correct.
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\copy-template-to-service.ps1 -TargetRepo D:\path\to\your-service-repo -Apply
+```
+
+Optional flags:
+
+| Flag                            | Effect                                                                                                                                              |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `-Apply`                        | Write files. Without this flag, the script is preview-only.                                                                                         |
+| `-OverwriteControlDocs`         | Allow overwriting existing `AI_PRODUCT_SPEC.md`, `AI_TASK_QUEUE.md`, `AI_WORKFLOW.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AGENTS.md`, `CLAUDE.md`. Default is to preserve them. |
+| `-IncludeLocalGitignoreRules`   | Append `ai-runs/*`, `!ai-runs/.gitkeep`, and `.claude/` to the target's `.gitignore`. Skipped automatically if those rules already exist.            |
+
+The copy script always refuses to:
+
+- copy onto itself (template path === target path)
+- copy `.git/`, `.claude/`, or any timestamped folder under `ai-runs/`
+- run `git add`, `git commit`, `git push`, or any deploy command
+- install dependencies (`npm`, `pnpm`, `yarn`, `pip`, `poetry`, `uv`, …)
+- delete any file in the target
+
+### Validation script — sanity check the install
+
+Run from inside the target repo (or pass `-TargetRepo`):
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -TargetRepo .
+```
+
+This checks:
+
+- every entry in `TEMPLATE_MANIFEST.json` → `requiredFiles` exists
+- every entry in `TEMPLATE_MANIFEST.json` → `toolFiles` exists
+- `ai-runs/.gitkeep` exists
+- `.gitignore` contains `ai-runs/*` and `.claude/` rules (warn-only)
+- the target is a git repository
+- `tools/ai-autopilot.ps1`, `tools/copy-template-to-service.ps1`, `tools/validate-template-install.ps1`, `tools/write-final-handoff.ps1`, `tools/collect-context.ps1`, and `tools/detect-tests.ps1` parse cleanly via `[System.Management.Automation.PSParser]::Tokenize`
+
+Add `-RunSmoke` to also run `ai-autopilot.ps1 -DryRun -Goal "template install smoke test"` (no Codex, no Claude, no tests):
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\validate-template-install.ps1 -TargetRepo . -RunSmoke
+```
+
+The validator exits `0` when all required checks pass and `1` when any required file is missing or the smoke run fails. Warnings (e.g. missing `.gitignore` rules) do **not** cause a non-zero exit.
+
+### What to customise after copying
+
+After `copy-template-to-service.ps1 -Apply` completes, the human must edit two files in the target repo before running the harness against real work:
+
+- `AI_PRODUCT_SPEC.md` — describe what the service is, who uses it, what is in scope for the next iteration, what is out of scope, and how you will know "done".
+- `AI_TASK_QUEUE.md` — add at least one task ID (e.g. `T-101`) describing the change you want done first.
+
+Do not edit the harness scripts under `tools/`, `AGENTS.md`, `CLAUDE.md`, or `TEMPLATE_MANIFEST.json` in the target repo. Those carry the safety guarantees and the manifest is read by the validator.
+
+### Safe first commands after install
+
+In order, from the target service repo:
+
+1. `validate-template-install.ps1 -TargetRepo .`
+2. `validate-template-install.ps1 -TargetRepo . -RunSmoke`
+3. `ai-autopilot.ps1 -DryRun -Goal "service smoke test"`
+4. `ai-autopilot.ps1 -TestLevel unit -Goal "unit validation"`
+5. `ai-autopilot.ps1 -Implementer codex -DryRun -Goal "Codex prompt only"`
+6. `ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Claude review prompt only"`
+
+Only after every step above succeeds should you try `-RunImplementer`, `-RunReviewer`, or `-EnableFixLoop`. See `TEMPLATE_USAGE.md` Section B for the full safe progression.
+
+### Updating the template later
+
+When the template source repo gets a new phase, update an existing target service repo by:
+
+1. Pulling the latest in the **template source** repo.
+2. Running the copy script (preview first, then apply) against the target. Existing control documents are preserved by default; pass `-OverwriteControlDocs` only if you intend to discard your customisations.
+3. Re-running `validate-template-install.ps1 -TargetRepo <target> -RunSmoke` against the target.
+4. Reading the updated `TEMPLATE_CHANGELOG.md` to learn what changed.
+
+The copy script never deletes files in the target. If a Phase N+1 release renames a tool, you may end up with both the old and the new tool until you remove the old one by hand. The validator will not flag the leftover.
+
+### Local artifacts and `.gitignore` (recap)
+
+- `ai-runs/*` is local-only. Generated `ai-runs/<yyyyMMdd-HHmmss-fff>/` folders must never be committed. Keep `ai-runs/.gitkeep` tracked.
+- `.claude/` is local-only. It holds per-machine Claude Code CLI permission settings and session data.
+- The Phase 6 copy script never adds the timestamped run folders or the `.claude/` directory to the target.
+
+### Phase 6 hard rules (carried over from prior phases)
+
+- No `git commit`, `git push`, `git tag`, deploy command, or dependency install is performed by any Phase 6 script.
+- No real Codex CLI invocation occurs from the Phase 6 packaging path.
+- No real Claude CLI invocation occurs from the Phase 6 packaging path. The validator's `-RunSmoke` mode passes `-DryRun` to `ai-autopilot.ps1`, which suppresses Codex, Claude, and test execution.
+- The copy script's default is preview. `-Apply` is required to write any file.
+- The copy script never overwrites control documents unless `-OverwriteControlDocs` is passed explicitly.
+- The validator never modifies the target repo, never runs `git add/commit/push`, and never invokes Codex or Claude.
+- Human approval is still required at the end of every harness run.
+
 ## Non-negotiable rules
 
 - No tool commits, pushes, deploys, or installs dependencies automatically in any phase described here.

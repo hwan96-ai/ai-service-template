@@ -32,7 +32,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Write-Host '=== ai-autopilot (Phase 5) ==='
+$TemplateVersion = '0.6.0'
+Write-Host ('=== ai-autopilot (Phase 6, TemplateVersion {0}) ===' -f $TemplateVersion)
 
 # Phase 5 hard cap on MaxIterations. Refused BEFORE any run folder is created
 # and BEFORE any Codex/Claude process is spawned.
@@ -109,6 +110,7 @@ if ($DryRun) {
 
 # Save run parameters
 $paramLines = @(
+    "TemplateVersion:  $TemplateVersion",
     "Goal:             $Goal",
     "TaskId:           $TaskId",
     "Timestamp:        $ts",
@@ -1426,7 +1428,8 @@ $loopSummaryPath = Join-Path $runFolder 'loop-summary.json'
     -TerminalAction $terminalAction `
     -TerminalReason $loopStopReason `
     -MaxChangedFiles $MaxChangedFiles `
-    -MaxDiffStatLines $MaxDiffStatLines
+    -MaxDiffStatLines $MaxDiffStatLines `
+    -TemplateVersion $TemplateVersion
 
 # Optional: copy handoff to clipboard
 if ($CopyHandoffToClipboard) {
