@@ -79,6 +79,20 @@ Expected output: each command writes a timestamped local folder under `ai-runs/`
 
 See [examples/sample-AI_FINAL_HANDOFF.md](examples/sample-AI_FINAL_HANDOFF.md) for a sanitized sample handoff. For the full safe progression, use `TEMPLATE_USAGE.md`.
 
+## Why Not Just Use Codex, Claude Code, Cursor, Or AGENTS.md?
+
+This project is most useful when you already want Codex CLI and Claude Code CLI,
+but want stronger local guardrails around them. It does not replace those tools;
+it makes their use more deliberate, reviewable, and repeatable.
+
+| Option | What it is good for | What this harness adds |
+| ------ | ------------------- | ---------------------- |
+| Raw Codex CLI | Direct implementation help | Conservative run wrapper, dry-run first, sandbox expectations, generated artifacts, no auto-commit, no auto-push, no deploy, no dependency install, and final human handoff. |
+| Raw Claude Code CLI | Interactive planning, review, and editing | Review-only path, prompt artifacts, explicit execution gates, and a no-commit/no-push/no-deploy policy. |
+| Cursor / aider / similar tools | Productive agentic coding | This project intentionally reduces autonomy with prompt-only defaults, local safety gates, explicit opt-in execution, and bounded fix loops. |
+| README.md only | Human-readable guidance | PowerShell scripts, detected-test summaries, local run folders, and handoff artifacts that make the workflow repeatable. |
+| AGENTS.md / CLAUDE.md only | Agent instructions | Copy and validation scripts, run artifacts, conservative execution gates, bounded fix loops, and a final human handoff. |
+
 ## Who This Is For
 
 - Developers who want Codex CLI or Claude Code CLI help in a real repo while keeping final control local
