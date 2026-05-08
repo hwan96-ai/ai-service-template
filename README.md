@@ -10,6 +10,8 @@ The current implementation is Windows + PowerShell focused. The default posture 
 
 > Template version: `0.6.0`. See `TEMPLATE_CHANGELOG.md` for release history.
 
+For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md).
+
 ## Requirements
 
 - Windows 10/11
