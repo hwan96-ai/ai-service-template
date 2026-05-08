@@ -48,6 +48,24 @@ codex --version
 claude --version
 ```
 
+## 2-Minute Quickstart
+
+Start with dry-run and prompt-only modes. These commands create local review artifacts, but they do not run real Codex or Claude, do not run tests, and do not commit, push, deploy, install dependencies, or use permissive sandbox flags.
+
+```powershell
+cd D:\your-service-repo
+
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -DryRun -Goal "service smoke test"
+
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Implementer codex -DryRun -Goal "Generate a Codex implementation prompt only"
+
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -Reviewer claude -DryRun -Goal "Generate a Claude review prompt only"
+```
+
+Expected output: each command writes a timestamped local folder under `ai-runs/` with a human-reviewable `AI_FINAL_HANDOFF.md`. The Codex command also writes a Codex prompt artifact without executing Codex. The Claude command writes a Claude review prompt artifact without executing Claude. Review the handoff before deciding whether to opt in to real AI execution.
+
+See [examples/sample-AI_FINAL_HANDOFF.md](examples/sample-AI_FINAL_HANDOFF.md) for a sanitized sample handoff. For the full safe progression, use `TEMPLATE_USAGE.md`.
+
 ## Who This Is For
 
 - Developers who want Codex CLI or Claude Code CLI help in a real repo while keeping final control local
@@ -97,6 +115,8 @@ D:\ai-service-template
 |-- SERVICE_ONBOARDING_CHECKLIST.md
 |-- TEMPLATE_CHANGELOG.md
 |-- TEMPLATE_MANIFEST.json
+|-- examples/
+|   `-- sample-AI_FINAL_HANDOFF.md
 |-- ai-runs/
 |   `-- .gitkeep
 `-- tools/
@@ -125,6 +145,7 @@ D:\ai-service-template
 | `SERVICE_ONBOARDING_CHECKLIST.md` | Checklist for applying the harness to a service repo. |
 | `tools/copy-template-to-service.ps1` | Preview-first copy script for installing the harness into another repo. |
 | `tools/validate-template-install.ps1` | Install validator and dry-run smoke-check helper. |
+| `examples/sample-AI_FINAL_HANDOFF.md` | Sanitized sample output so you can see the review artifact before running the harness. |
 | `ai-runs/` | Local run artifacts. Timestamped run folders are ignored by git. |
 
 ---
