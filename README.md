@@ -1,143 +1,131 @@
 # AI Service Template
 
-이 템플릿은 **기존 서비스 레포지토리**에 복사해서 쓰는 로컬 PowerShell 기반 AI 자동화 하네스입니다.
-ChatGPT로 계획을 세우고 → Codex CLI로 코드를 구현하고 → Claude Code CLI로 리뷰하고 →
-로컬 테스트를 실행하고 → 사람이 최종 승인하는 흐름을 **안전하게** 지원합니다.
-커밋, 푸시, 배포, 패키지 설치는 기본적으로 **절대 자동으로 하지 않습니다**.
+Local safety harness for Codex CLI and Claude Code CLI in real repos.
 
-> **Template version:** `0.6.0` — 변경 이력은 `TEMPLATE_CHANGELOG.md` 참조.
+You want Codex CLI or Claude Code CLI to help in a real repository. You do not want them to commit, push, deploy, install packages, or bypass review. This project is the local safety layer between those AI tools and your repository.
 
----
+This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workflow scripts, prompts, guardrails, test detection, and final handoff artifacts around those tools. The `/goal` and `/ralph` workflow prompts describe what to do, but they are not the full runtime: end-to-end execution still requires local CLI setup, authentication, and explicit script flags.
 
-## 목차
+The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-1. [이 템플릿이 하는 일](#이-템플릿이-하는-일)
-2. [이 템플릿이 하지 않는 일](#이-템플릿이-하지-않는-일)
-3. [파일 구조](#파일-구조)
-4. [사전 요구사항](#사전-요구사항)
-5. [기존 서비스 레포에 적용하기](#기존-서비스-레포에-적용하기)
-6. [복사 후 먼저 수정할 파일들](#복사-후-먼저-수정할-파일들)
-7. [안전한 첫 실행 명령들](#안전한-첫-실행-명령들)
-8. [준비됐을 때: 실제 Codex/Claude 실행](#준비됐을-때-실제-codexclaude-실행)
-9. [안전 모델](#안전-모델)
-10. [일반적인 워크플로우](#일반적인-워크플로우)
-11. [자주 발생하는 문제와 해결법](#자주-발생하는-문제와-해결법)
-12. [커밋 정책](#커밋-정책)
-13. [현재 템플릿 버전](#현재-템플릿-버전)
-14. [대상 독자](#대상-독자)
-15. [라이선스 / 재사용](#라이선스--재사용)
+> Template version: `0.6.0`. See `TEMPLATE_CHANGELOG.md` for release history.
 
----
+## Requirements
 
-## 이 템플릿이 하는 일
+- Windows 10/11
+- PowerShell 5.1 or newer
+- Git, with Git for Windows recommended
+- Codex CLI installed and authenticated for real Codex execution
+- Claude Code CLI installed and authenticated for real Claude review
+- ChatGPT/OpenAI account capable of using Codex
+- Claude account capable of using Claude Code
 
-이 템플릿을 서비스 레포에 복사하면 다음이 가능해집니다:
+Prompt-only and dry-run checks can be useful before both CLIs are ready. End-to-end local AI execution needs the CLI tools and accounts above.
 
-- **재사용 가능한 AI 제어 문서와 도구 스크립트를 서비스 레포에 복사**합니다
-  (`copy-template-to-service.ps1` 사용, 기본값은 미리보기 전용)
-- **설치 검증**을 실행해 필수 파일이 모두 있는지 확인합니다
-  (`validate-template-install.ps1`)
-- **git status / diff 컨텍스트를 안전하게 수집**합니다 — 비밀 파일은 읽지 않습니다
-  (`collect-context.ps1`)
-- **테스트 러너를 자동 감지**합니다 — 아무것도 설치하거나 실행하지 않습니다
-  (`detect-tests.ps1`)
-- **안전한 로컬 테스트를 옵션으로 실행**합니다 (`-TestLevel unit`)
-- **Codex 구현 프롬프트를 생성**합니다 (`-Implementer codex`)
-- **Codex 원샷 실행을 옵션으로 수행**합니다 (`-RunImplementer`)
-- **Claude 리뷰 프롬프트를 생성**합니다 (`-Reviewer claude`)
-- **Claude 리뷰-온리 실행을 옵션으로 수행**합니다 (`-RunReviewer`)
-- **제한된 Codex ↔ Claude 수정 루프**를 지원합니다 (`-EnableFixLoop`, 최대 3회)
-- 모든 실행 결과를 **`AI_FINAL_HANDOFF.md`에 기록**하고 사람의 최종 판단을 요청합니다
-- 기본값으로는 **커밋, 푸시, 배포, 패키지 설치를 절대 하지 않습니다**
+## Optional Tools
 
----
+- Claude Desktop or Claude Code Desktop
+- Claude Code VS Code extension
+- Codex web or IDE extension
+- Pester for PowerShell self-tests
 
-## 이 템플릿이 하지 않는 일
+## Not Required
 
-다음은 이 템플릿이 **의도적으로 하지 않는** 일입니다:
+- GPT API automation
+- Auto-commit
+- Auto-push
+- Deployment credentials
+- Dependency installation during harness runs
 
-- `AI_PRODUCT_SPEC.md` / `AI_TASK_QUEUE.md`를 직접 채우지 않으면 **서비스를 자동으로 이해하지 못합니다** — 컨텍스트는 사람이 작성해야 합니다
-- **자동으로 커밋하지 않습니다** (`-AutoCommit`은 오류로 거부됩니다)
-- **푸시하지 않습니다**
-- **배포하지 않습니다**
-- **패키지를 설치하지 않습니다** (`npm`, `pip`, `yarn` 등 모두 금지)
-- **샌드박스/권한을 우회하지 않습니다** (`danger-full-access`, `bypass`, `yolo`, `full-auto` 플래그 사용 금지)
-- **사람의 리뷰를 대체하지 않습니다** — 하네스는 초안과 요약을 제공하지만 최종 판단은 사람이 합니다
-- **프로덕션에 안전하지 않은 변경을 하지 않습니다**
-- **명시적 스위치 없이 Codex나 Claude를 실행하지 않습니다** — `-RunImplementer` / `-RunReviewer`가 없으면 프롬프트 파일만 생성합니다
+## Preflight Check
 
----
-
-## 파일 구조
-
-```
-D:\ai-service-template
-├─ AI_PRODUCT_SPEC.md            # 서비스 설명 (직접 작성)
-├─ AI_ACCEPTANCE_CRITERIA.md     # 단계별 완료 기준
-├─ AI_TASK_QUEUE.md              # 작업 큐 (직접 작성)
-├─ AI_WORKFLOW.md                # 하네스 동작 흐름 (단계별 상세)
-├─ AGENTS.md                     # Codex CLI 가드레일
-├─ CLAUDE.md                     # Claude Code CLI 가드레일
-├─ README.md                     # 이 파일
-├─ TEMPLATE_USAGE.md             # 상세 사용자 가이드
-├─ SERVICE_ONBOARDING_CHECKLIST.md  # 비개발자용 체크리스트
-├─ TEMPLATE_CHANGELOG.md         # 단계별 변경 이력
-├─ TEMPLATE_MANIFEST.json        # 머신-리더블 파일 목록 + 버전
-├─ ai-runs/                      # 로컬 전용 실행 아티팩트 (gitignore됨)
-│  └─ .gitkeep
-└─ tools/
-   ├─ ai-autopilot.ps1                  # 하네스 오케스트레이터 (핵심)
-   ├─ collect-context.ps1               # git 컨텍스트 안전 스냅샷
-   ├─ detect-tests.ps1                  # 테스트 러너 감지 (설치/실행 없음)
-   ├─ write-final-handoff.ps1           # AI_FINAL_HANDOFF.md 생성기
-   ├─ write-claude-review-prompt.ps1    # Phase 3 리뷰 프롬프트
-   ├─ write-codex-implementation-prompt.ps1  # Phase 4 원샷 프롬프트
-   ├─ write-codex-fix-prompt.ps1        # Phase 5 수정 루프 프롬프트
-   ├─ copy-template-to-service.ps1      # Phase 6 — 기본값: 미리보기 전용
-   └─ validate-template-install.ps1    # Phase 6 — 설치 검증 + 스모크 테스트
-```
-
-### 주요 파일 설명
-
-| 파일 | 역할 |
-|------|------|
-| `ai-autopilot.ps1` | 모든 단계를 조율하는 메인 스크립트. 여기서 모든 것이 시작됩니다 |
-| `AI_PRODUCT_SPEC.md` | 서비스가 무엇을 하는지, 어떤 기술 스택인지 직접 기술합니다 |
-| `AI_TASK_QUEUE.md` | 이번 실행에서 Codex가 처리할 작업 목록입니다 |
-| `AI_ACCEPTANCE_CRITERIA.md` | 어떻게 하면 완료로 볼 수 있는지 기준을 정의합니다 |
-| `AGENTS.md` | Codex에게 허용/금지 행동을 알려주는 가드레일 문서 |
-| `CLAUDE.md` | Claude에게 허용/금지 행동을 알려주는 가드레일 문서 |
-| `TEMPLATE_USAGE.md` | 단계별 상세 사용 가이드 (이 README보다 더 깊은 내용) |
-| `SERVICE_ONBOARDING_CHECKLIST.md` | 코드를 잘 모르는 사용자를 위한 체크리스트 |
-| `copy-template-to-service.ps1` | 이 템플릿을 다른 서비스 레포에 복사합니다 (기본값: 미리보기만) |
-| `validate-template-install.ps1` | 복사 후 설치가 올바른지 확인합니다 |
-| `ai-runs/` | 실행마다 생성되는 타임스탬프 폴더 (로컬 전용, 커밋 안 됨) |
-
----
-
-## 사전 요구사항
-
-### 필수
-
-- **Windows PowerShell** (Windows 10/11 기본 내장)
-- **Git** — 서비스 레포가 git 레포여야 합니다
-
-### 선택 (해당 기능 사용 시 필요)
-
-- **Claude Code CLI** — Claude 리뷰 기능 사용 시
-- **Codex CLI** — Codex 구현 기능 사용 시
-- **Node.js / Python** — 서비스 레포에 해당 테스트가 있을 때만
-
-### 버전 확인 명령
+Run these from the repository where you plan to use the harness:
 
 ```powershell
 git --version
-claude --version
+$PSVersionTable.PSVersion
 codex --version
+claude --version
 ```
 
-> **중요:** `-DryRun`(미리보기)과 프롬프트-온리 흐름은 실제 Codex/Claude가 설치되어 있지 않아도 동작합니다.
-> 처음에는 DryRun으로 시작하고, 나중에 실제 실행을 활성화하면 됩니다.
+## Who This Is For
+
+- Developers who want Codex CLI or Claude Code CLI help in a real repo while keeping final control local
+- Teams that want prompt-only review artifacts before allowing AI execution
+- Maintainers who need a repeatable handoff showing git status, detected tests, AI output, review notes, and remaining risks
+- Users who want explicit gates before any implementer or reviewer process runs
+
+## Who This Is Not For
+
+- Users looking for a hosted AI coding service
+- Teams that want automatic commits, pushes, deploys, or dependency installation
+- Projects that need Linux/macOS-first shell support today
+- Workflows that intentionally require permissive sandbox flags or bypassed review
+
+## What The Harness Does
+
+- Copies reusable AI control documents and PowerShell scripts into a service repo
+- Collects safe git status and diff summaries without reading secret file contents
+- Detects likely local test commands without installing dependencies
+- Runs selected safe tests only when requested
+- Generates Codex implementation prompts and can run Codex only with explicit opt-in
+- Generates Claude review prompts and can run Claude review-only only with explicit opt-in
+- Supports a bounded Codex and Claude fix loop when explicitly enabled
+- Writes local run artifacts under `ai-runs/` and ends with `AI_FINAL_HANDOFF.md`
+
+## What The Harness Does Not Do
+
+- It does not understand your service until you fill in `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md`
+- It does not replace Codex CLI, Claude Code CLI, ChatGPT, or Claude accounts
+- It does not run Codex or Claude unless the matching run switches are provided
+- It does not commit, push, deploy, install dependencies, tag releases, or merge branches
+- It does not use `danger-full-access`, bypass, yolo, full-auto, or other permissive sandbox flags
+- It does not replace human review; it creates artifacts for human review
+
+## Repository Layout
+
+```text
+D:\ai-service-template
+|-- AI_PRODUCT_SPEC.md
+|-- AI_ACCEPTANCE_CRITERIA.md
+|-- AI_TASK_QUEUE.md
+|-- AI_WORKFLOW.md
+|-- AGENTS.md
+|-- CLAUDE.md
+|-- README.md
+|-- TEMPLATE_USAGE.md
+|-- SERVICE_ONBOARDING_CHECKLIST.md
+|-- TEMPLATE_CHANGELOG.md
+|-- TEMPLATE_MANIFEST.json
+|-- ai-runs/
+|   `-- .gitkeep
+`-- tools/
+    |-- ai-autopilot.ps1
+    |-- collect-context.ps1
+    |-- detect-tests.ps1
+    |-- write-final-handoff.ps1
+    |-- write-claude-review-prompt.ps1
+    |-- write-codex-implementation-prompt.ps1
+    |-- write-codex-fix-prompt.ps1
+    |-- copy-template-to-service.ps1
+    `-- validate-template-install.ps1
+```
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `tools/ai-autopilot.ps1` | Main local orchestrator. This is where a harness run starts. |
+| `AI_PRODUCT_SPEC.md` | Human-written service context for the target repo. |
+| `AI_TASK_QUEUE.md` | Human-written work queue for the target repo. |
+| `AI_ACCEPTANCE_CRITERIA.md` | Completion and safety criteria. |
+| `AGENTS.md` | Guardrails for Codex CLI. |
+| `CLAUDE.md` | Guardrails for Claude Code CLI. |
+| `TEMPLATE_USAGE.md` | Deeper usage guide. |
+| `SERVICE_ONBOARDING_CHECKLIST.md` | Checklist for applying the harness to a service repo. |
+| `tools/copy-template-to-service.ps1` | Preview-first copy script for installing the harness into another repo. |
+| `tools/validate-template-install.ps1` | Install validator and dry-run smoke-check helper. |
+| `ai-runs/` | Local run artifacts. Timestamped run folders are ignored by git. |
 
 ---
 
@@ -253,7 +241,7 @@ Codex가 허용/금지할 파일 경로와 명령어를 서비스에 맞게 수�
 ### 5. `CLAUDE.md` — Claude 가드레일
 
 Claude가 리뷰어로 동작할 때의 허용 범위를 정의합니다.
-기본 템플릿은 `Phase 1` 리뷰-온리 모드로 설정되어 있습니다.
+기본 템플릿은 리뷰-온리 모드로 설정되어 있습니다.
 서비스별 파일 경로에 맞게 "allowed file scope" 섹션을 업데이트하세요.
 
 > **주의:** 이 파일들을 채우지 않으면 Codex/Claude가 서비스 컨텍스트를 모르는 상태로 실행됩니다.
@@ -583,7 +571,7 @@ git commit -m "feat: <작업 내용 요약>"
 | TemplateVersion | `0.6.0` |
 | Latest known commit | `d8d77f6` |
 | 구현된 Phase | 1, 2, 3, 4, 5, 6 |
-| Phase 6 bugfix | collect-context 및 validation 스모크 아티팩트 하드닝 |
+| Latest hardening | collect-context 및 validation 스모크 아티팩트 하드닝 |
 
 ### 구현된 단계 요약
 
