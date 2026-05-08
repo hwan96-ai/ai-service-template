@@ -8,10 +8,18 @@ this template repository's history.
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
 
-## 0.6.0 — Phase 6: packaging and reuse support (unreleased)
+## Public release hardening
 
-Commit id: *(not assigned — Phase 6 commit will be made by the human after
-review.)*
+After the 0.6.0 packaging work, this repository received public-release
+cleanup: repository hygiene, MIT licensing, a stronger README front door,
+a sample final handoff, reusable public template docs, `SECURITY.md`, safety
+self-tests, and a concise comparison section. These changes are documentation,
+metadata, and test visibility work; they do not change harness runtime
+behaviour.
+
+## 0.6.0 — Phase 6: packaging and reuse support
+
+Commit id: `1e705f8 chore: add Phase 6 template packaging and onboarding support`.
 
 Added:
 
