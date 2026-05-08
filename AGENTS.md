@@ -67,6 +67,25 @@ tools/write-codex-implementation-prompt.ps1
 
 Phase 4 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `tools/write-claude-review-prompt.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
 
+## Phase 5 allowed files
+
+```
+AI_ACCEPTANCE_CRITERIA.md
+AI_TASK_QUEUE.md
+AI_WORKFLOW.md
+AGENTS.md
+CLAUDE.md
+tools/ai-autopilot.ps1
+tools/write-final-handoff.ps1
+tools/write-codex-implementation-prompt.ps1
+tools/write-claude-review-prompt.ps1
+tools/write-codex-fix-prompt.ps1
+```
+
+`tools/write-codex-fix-prompt.ps1` is the **only** new file Phase 5 introduces. Per-iteration summary / decision artifacts are written by inline logic inside `tools/ai-autopilot.ps1`; do not introduce additional helper scripts under `tools/`.
+
+Phase 5 must not modify `.gitignore`, `ai-runs/.gitkeep`, generated `ai-runs/<timestamp>/` artifacts, `tools/collect-context.ps1`, `tools/detect-tests.ps1`, `AI_PRODUCT_SPEC.md`, or any source/test/config file outside this list.
+
 If a task appears to require modifying a file outside the allowed list for the current phase, **stop and report**. Do not silently expand scope.
 
 ## Phase 2 guardrails
@@ -101,6 +120,21 @@ If a task appears to require modifying a file outside the allowed list for the c
 - `git commit`, `git push`, `git tag`, deploy operations remain forbidden.
 - Dependency installation (`npm`, `pnpm`, `yarn`, `pip`, `poetry`, `uv`, etc.) remains forbidden by the harness, including inside the Codex prompt itself.
 - Generated `codex-implementation-prompt.md` and `codex-output.md` live under `ai-runs/<timestamp>/`. They are local-only artifacts, ignored by `.gitignore`, and must not be committed or hand-edited.
+
+## Phase 5 guardrails
+
+- Phase 5 introduces a **bounded Codex ↔ Claude fix loop** that runs only when the human passes `-EnableFixLoop` together with `-Implementer codex -RunImplementer` (and typically `-Reviewer claude -RunReviewer`). All four switches default to off / `none`. Default `-MaxIterations` is `1` (Phase 4 behaviour); the absolute cap is `3`.
+- `-FixTrigger` accepts `tests`, `claude`, or `tests-or-claude`. Default is `tests-or-claude`.
+- `-MaxChangedFiles` defaults to `12` and `-MaxDiffStatLines` defaults to `120`. These intentionally conservative defaults must not be silently widened in the template; humans may raise them per-invocation when working on a larger task.
+- `-MaxIterations < 1` or `-MaxIterations > 3` must abort cleanly **before** any run folder is created and before any Codex or Claude process is spawned.
+- `-DryRun` still suppresses Codex execution, Claude execution, and test execution even if `-EnableFixLoop`, `-RunImplementer`, or `-RunReviewer` are also set. Iteration artifacts in DryRun are prompt-only / placeholder, never real Codex or Claude output.
+- Each iteration after the first uses a **fix-only** Codex prompt produced by `tools/write-codex-fix-prompt.ps1`. The fix prompt contains only the previous iteration's failed-test summary, the parsed Claude blocking / requested-changes excerpt, and summary git context. It MUST NOT include raw file diffs, full source contents, secret material, broader scope, dependency-install requests, commit/push/deploy requests, or permissive sandbox flags.
+- The Codex invocation pattern stays locked to `codex exec --sandbox workspace-write <prompt>` for both the implementation prompt and the fix prompt. Never `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass, or any deprecated full-auto flag.
+- Stop conditions (any one halts the loop): Claude verdict `approve`; Claude verdict `block`; changed-file count > `-MaxChangedFiles`; diff-stat insertions+deletions > `-MaxDiffStatLines`; secret-like paths in the changed-file list; the same failure fingerprint repeats across consecutive iterations; iteration budget exhausted; `-EnableFixLoop` is off; tests missing AND no Claude review executed; or no Claude verdict detected and no clear fixable test failure.
+- "No tests selected", "no tests found", and "Claude review not executed" must NEVER be treated as success.
+- Auto-commit, auto-push, auto-deploy, auto-tag, auto-merge, and dependency installation all remain forbidden in every iteration.
+- Human approval is still required when the loop ends. The harness will not approve, commit, push, or deploy on its own.
+- Per-iteration files (`iteration-XX-summary.md`, `iteration-XX-decision.json`, optional `iteration-XX-codex-output.md`, `iteration-XX-test-summary.json`, `iteration-XX-claude-review.md`) and the top-level latest-iteration snapshots are local-only `ai-runs/<timestamp>/` artifacts. They must not be committed or hand-edited.
 
 ## Hard rules
 

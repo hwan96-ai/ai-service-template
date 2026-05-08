@@ -270,6 +270,120 @@ Generated `codex-implementation-prompt.md` and `codex-output.md` live under `ai-
 - Dependency installation
 - Permissive Codex sandboxes (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)
 
+## Phase 5 — Bounded Codex ↔ Claude fix loop (current)
+
+Goal: when the human opts in, run a small, bounded Codex ↔ Claude fix loop after the initial Codex one-shot implementation. Each iteration runs Codex (implementation prompt on iteration 1, fix-only prompt on iterations 2+), the safe local test selection, and the Claude reviewer. The loop stops as soon as Claude approves, the iteration budget is exhausted, or any Phase 5 safety check trips. **The loop never commits, pushes, deploys, installs dependencies, retries beyond `-MaxIterations`, escalates Codex sandbox flags, or proceeds without human approval at the end.**
+
+### What changes in Phase 5
+
+- New switch `-EnableFixLoop` gates the loop. Default is **off**. When off, the harness behaves identically to Phase 4.
+- New parameter `-FixTrigger` (`tests` | `claude` | `tests-or-claude`, default `tests-or-claude`) decides which failure types are eligible to trigger another Codex iteration.
+- `-MaxIterations` is hard-capped at `3`. Values outside `1..3` abort cleanly **before** any run folder is created and before any Codex / Claude process is spawned.
+- New parameters `-MaxChangedFiles` (default `12`) and `-MaxDiffStatLines` (default `120`) bound how large the cumulative diff is allowed to grow during the loop. The defaults are intentionally conservative; users may raise them per-invocation when working on a larger task.
+- Iterations 2+ use a **fix-only** Codex prompt produced by `tools/write-codex-fix-prompt.ps1`. The fix prompt embeds only failed-test summaries, the parsed Claude blocking / requested-changes content, and summary git context. It never embeds raw file diffs, full source files, or secret material.
+- Each iteration emits per-iteration artifacts: `iteration-XX-summary.md`, `iteration-XX-decision.json`, plus copies of the iteration's Codex prompt / output, test summary / log, and Claude review prompt / output.
+- Top-level files (`codex-implementation-prompt.md`, `codex-fix-prompt.md`, `codex-output.md`, `test-summary.json`, `test-output.txt`, `claude-review-prompt.md`, `claude-review.md`) hold the **latest iteration's** snapshot for backward compatibility with Phases 2–4 readers.
+- A new `loop-summary.json` records the entire iteration history (action / reason per iteration), and `AI_FINAL_HANDOFF.md` adds a `## Loop Summary` table.
+
+### Default behaviour is unchanged from Phase 4
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -DryRun -Goal "Phase 5 default smoke test"
+```
+
+With no Phase 5 switches set, the harness runs exactly one iteration, writes the same artifacts as Phase 4 plus per-iteration snapshots, and emits a `Loop Summary` block in the handoff that records `EnableFixLoop=False` and `CompletedIterations=1`.
+
+### Prompt-only fix loop (DryRun preview)
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -EnableFixLoop -MaxIterations 2 -Implementer codex -Reviewer claude -DryRun -Goal "Phase 5 fix-loop preview"
+```
+
+`-DryRun` always wins. Even though `-EnableFixLoop` is set, no Codex CLI or Claude CLI process is spawned. The harness writes the iteration-1 implementation prompt, placeholder Codex output, placeholder Claude review, and stops after iteration 1 with reason `no-codex-execution-cannot-fix` (Codex did not actually edit anything, so there is nothing to fix in iteration 2). This is the recommended pattern for inspecting prompts before enabling real execution.
+
+### Active fix loop (only after verifying local CLI flags)
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -EnableFixLoop -MaxIterations 2 `
+    -Implementer codex -RunImplementer `
+    -Reviewer claude  -RunReviewer `
+    -TestLevel unit -Goal "Phase 5: small fix iteration"
+```
+
+This is the only configuration in which the harness will spawn Codex and Claude across multiple iterations. It still uses the locked patterns:
+
+- Codex: `codex exec --sandbox workspace-write <prompt>` for both the implementation prompt and the fix prompt.
+- Claude: `claude -p <prompt> --output-format text --tools ""`.
+
+No permissive flags are ever introduced. Verify `codex exec --help`, `codex status`, and `claude -p --help` locally before relying on this configuration.
+
+### Loop control flags summary
+
+| Flag                     | Default | Effect                                                                                                                  |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `-EnableFixLoop`         | off     | Master switch for Phase 5. Off = single iteration (Phase 4 behaviour).                                                  |
+| `-MaxIterations <n>`     | `1`     | Number of iterations. Must be in `1..3`; otherwise the harness aborts before any action.                                |
+| `-FixTrigger <which>`    | `tests-or-claude` | `tests` continues only on test failures; `claude` continues only on Claude `request_changes`; `tests-or-claude` continues on either. |
+| `-MaxChangedFiles <n>`   | `12`    | Halt the loop if the cumulative changed-file count exceeds this value. Override per-invocation for larger tasks.        |
+| `-MaxDiffStatLines <n>`  | `120`   | Halt the loop if cumulative insertions+deletions exceed this value. Override per-invocation for larger tasks.           |
+
+### Stop conditions (any one halts the loop)
+
+- Claude verdict `approve` → stop (success path; manual approval still required).
+- Claude verdict `block` → halt, manual review.
+- Iteration budget exhausted (`iteration >= MaxIterations`) → stop.
+- `-EnableFixLoop` is off → stop after iteration 1.
+- `-MaxChangedFiles` exceeded → halt.
+- `-MaxDiffStatLines` exceeded → halt.
+- Secret-like paths appear in the changed-file list → halt.
+- The same failure fingerprint repeats across consecutive iterations → halt.
+- Codex execution failed or was unsupported → halt.
+- No Claude verdict was detected and no fixable test failure was observed → stop, manual review.
+- Tests are missing AND Claude was not executed → stop, manual review.
+- Codex never executed in iteration 1 (e.g. `-RunImplementer` not set, `-DryRun` set, `-Implementer none`) → stop after iteration 1; iterations 2+ would have nothing to fix.
+
+"No tests found", "no commands selected", and "Claude review not executed" are NEVER treated as success. The harness always falls back to "manual review required" in those cases.
+
+### Iteration artifacts
+
+For each iteration `XX` the harness writes:
+
+- `iteration-XX-summary.md` — human-readable iteration summary.
+- `iteration-XX-decision.json` — structured decision record with stop signals, fingerprint, and chosen action.
+- `iteration-XX-codex-implementation-prompt.md` (iteration 1) or `iteration-XX-codex-fix-prompt.md` (iterations 2+).
+- `iteration-XX-codex-output.md` — copy of the latest Codex output for that iteration.
+- `iteration-XX-test-summary.json`, `iteration-XX-test-output.txt`.
+- `iteration-XX-claude-review-prompt.md`, `iteration-XX-claude-review.md`.
+
+Top-level files inside the run folder (`codex-output.md`, `test-summary.json`, `test-output.txt`, `claude-review.md`, etc.) are the latest iteration's snapshot and are read by `write-final-handoff.ps1` for backward compatibility with Phase 2/3/4 readers.
+
+### Smoke-testing AutoCommit refusal
+
+`-AutoCommit` remains refused in Phase 5:
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -AutoCommit -EnableFixLoop -Goal "AutoCommit refusal test"
+```
+
+Expected: the script writes `AutoCommit is not permitted (Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5). Aborting before any action.` and exits with code `2` **before** any run folder is created.
+
+### Smoke-testing MaxIterations cap
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\ai-autopilot.ps1 -EnableFixLoop -MaxIterations 5 -DryRun -Goal "MaxIterations cap test"
+```
+
+Expected: the script writes a clear error stating MaxIterations must be in `1..3` and exits with code `2` **before** any run folder is created.
+
+### Out of scope for Phase 5
+
+- AutoCommit, auto-push, auto-deploy, auto-tag, auto-merge.
+- Dependency installation in any iteration.
+- Codex execution outside `codex exec --sandbox workspace-write`.
+- Permissive sandbox / approval flags (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass).
+- Iteration counts greater than `3`.
+- Shipping raw source diffs or secret material into the fix prompt.
+
 ## Non-negotiable rules
 
 - No tool commits, pushes, deploys, or installs dependencies automatically in any phase described here.

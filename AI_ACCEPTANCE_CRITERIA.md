@@ -183,3 +183,82 @@ The harness is "done" for Phase 4 when ALL of the following are true.
 - Automatic retry loops
 - Auto-commit, auto-push, auto-deploy
 - Permissive Codex sandbox modes (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass)
+
+## Phase 5 — Bounded Codex ↔ Claude fix loop
+
+The harness is "done" for Phase 5 when ALL of the following are true.
+
+### Defaults and refusals
+
+- [ ] `-EnableFixLoop` defaults to **off**. With Phase 5 flags absent, `ai-autopilot.ps1` runs exactly one iteration and produces the same artifacts as Phase 4 plus per-iteration snapshots.
+- [ ] `-Implementer none`, `-RunImplementer:$false`, `-Reviewer none`, `-RunReviewer:$false`, and `-MaxIterations 1` remain the defaults.
+- [ ] `-FixTrigger` accepts only `tests`, `claude`, or `tests-or-claude`. The default value is `tests-or-claude`. Older values such as `review` or `both` are no longer accepted.
+- [ ] `-MaxChangedFiles` defaults to `12` (conservative). `-MaxDiffStatLines` defaults to `120` (conservative). Users may override these per-invocation but the template defaults must not be silently widened.
+- [ ] `-MaxIterations` is hard-capped at `3`. `-MaxIterations 0`, `-MaxIterations 4`, etc. abort cleanly **before** any run folder is created and **before** any Codex / Claude process is spawned.
+- [ ] `-AutoCommit` remains refused before any run folder is created.
+- [ ] `-DryRun` continues to suppress Codex execution, Claude execution, and test execution even when `-EnableFixLoop`, `-RunImplementer`, or `-RunReviewer` are also set.
+
+### Fix prompt generation
+
+- [ ] `tools/write-codex-fix-prompt.ps1` exists and is invoked for iterations 2+ when `-Implementer codex -EnableFixLoop` is set.
+- [ ] The fix prompt instructs Codex to act as a fix-only implementer and forbids broadening scope, dependency installation, commit / push / deploy / tag, secret access, destructive shell commands, and any permissive sandbox / approval flag.
+- [ ] The fix prompt embeds only failed-test summaries from the previous iteration's `test-summary.json`, the parsed Claude `Verdict` / `Blocking Issues` / `Non-blocking Issues` / `Suggested Fix Prompt For Codex` excerpt, and the filtered git status / diff stat / diff names. It NEVER embeds raw file diffs, full source contents, or secret material.
+- [ ] The fix prompt requests a structured response with sections: Summary, Files Changed, Tests Run Or Not Run, Risks, Follow-up Needed.
+
+### Iteration execution
+
+- [ ] Iteration 1 always uses the Phase 4 implementation prompt produced by `tools/write-codex-implementation-prompt.ps1`.
+- [ ] Iterations 2+ use the fix prompt produced by `tools/write-codex-fix-prompt.ps1`.
+- [ ] The Codex invocation pattern stays locked to `codex exec --sandbox workspace-write <prompt>` for every iteration. The harness never uses `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass, or any other permissive sandbox / approval flag.
+- [ ] The Claude invocation pattern stays locked to `claude -p <prompt> --output-format text --tools ""`. The harness never enables file edits or shell tools through Claude.
+- [ ] After each iteration, the harness re-runs `tools/collect-context.ps1` so the next iteration's safety checks reflect post-Codex state.
+- [ ] Iterations 2+ are not invoked when iteration 1's Codex did not actually execute (Codex `prompt-only`, `not-requested`, or `failed-or-unsupported`).
+
+### Stop conditions
+
+The loop must halt or stop on every one of the following:
+
+- [ ] Claude verdict `approve` → terminal action `stop`, reason `claude-verdict-approve`.
+- [ ] Claude verdict `block` → terminal action `halt`, reason `claude-verdict-block`.
+- [ ] Iteration budget exhausted → terminal action `stop`, reason `iteration-budget-exhausted`.
+- [ ] `-EnableFixLoop` is off → terminal action `stop`, reason `fix-loop-disabled`.
+- [ ] Cumulative changed-file count > `-MaxChangedFiles` → terminal action `halt`, reason starts with `max-changed-files-exceeded`.
+- [ ] Cumulative diff insertions+deletions > `-MaxDiffStatLines` → terminal action `halt`, reason starts with `max-diff-stat-exceeded`.
+- [ ] Secret-like paths appear in `git-diff-names.txt` (either explicit secret-shaped names or the redaction marker emitted by `collect-context.ps1`) → terminal action `halt`, reason `secret-like-paths-in-diff`.
+- [ ] The same failure fingerprint repeats across consecutive iterations → terminal action `halt`, reason `repeated-failure-fingerprint`.
+- [ ] Codex executed but failed or was unsupported → terminal action `halt`, reason `codex-failed-or-unsupported`.
+- [ ] No Claude verdict detected AND no fixable test failure → terminal action `stop`, reason `no-claude-verdict-and-no-fixable-failure` or `claude-review-not-executed-no-fixable-failure`.
+- [ ] Codex never executed in iteration 1 → terminal action `stop`, reason `no-codex-execution-cannot-fix`.
+- [ ] "No tests found", "no commands selected", and "Claude review not executed" are never treated as success.
+
+### Iteration artifacts
+
+- [ ] Each iteration writes `iteration-XX-summary.md` and `iteration-XX-decision.json`.
+- [ ] When applicable, each iteration also writes `iteration-XX-codex-implementation-prompt.md` (iteration 1) or `iteration-XX-codex-fix-prompt.md` (iterations 2+), `iteration-XX-codex-output.md`, `iteration-XX-test-summary.json`, `iteration-XX-test-output.txt`, `iteration-XX-claude-review-prompt.md`, and `iteration-XX-claude-review.md`.
+- [ ] The harness writes a top-level `loop-summary.json` recording every iteration's `codexStatus`, `testsAnyFailed`, `testsAllPassed`, `reviewVerdict`, `action`, `reason`, and `fingerprint`.
+- [ ] Existing top-level files (`codex-implementation-prompt.md`, `codex-fix-prompt.md`, `codex-output.md`, `test-summary.json`, `test-output.txt`, `claude-review-prompt.md`, `claude-review.md`) are preserved as the latest iteration's snapshot for Phase 2/3/4 readers and `write-final-handoff.ps1`.
+
+### Handoff integration
+
+- [ ] `write-final-handoff.ps1` adds a `## Loop Summary` section with EnableFixLoop, FixTrigger, MaxIterations, CompletedIterations, TerminalAction, TerminalReason, MaxChangedFiles, MaxDiffStatLines, and a per-iteration table.
+- [ ] When the loop converges across multiple iterations (Codex executed, tests passed, Claude verdict `approve`, `CompletedIterations > 1`), the Result line says `Codex ↔ Claude fix loop converged after N iterations: tests passed, Claude review approved — manual approval still required`.
+- [ ] When the loop halts on a Phase 5 safety check (secret-like paths, MaxChangedFiles, MaxDiffStatLines, repeated-failure-fingerprint), the Result line says `fix loop halted by Phase 5 safety check (<reason>) — manual review required`.
+- [ ] When tests failed in the final iteration, the Result line still reports the test failure regardless of the loop state.
+- [ ] When `-EnableFixLoop` is off, the Result line falls back to the existing Phase 2 / 3 / 4 wording.
+
+### Safety (carried over)
+
+- [ ] No `git commit`, `git push`, `git tag`, deploy, or dependency-install command is executed by the harness in any iteration.
+- [ ] No iteration introduces permissive sandbox / approval flags (`danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, yolo, bypass).
+- [ ] No iteration broadens the allowed-files scope; the fix prompt explicitly forbids unrelated refactors.
+- [ ] Generated `iteration-XX-*`, `loop-summary.json`, `codex-fix-prompt.md`, etc. are local `ai-runs/` artifacts and remain ignored by `.gitignore`.
+- [ ] Phase 1, Phase 2, Phase 3, and Phase 4 smoke tests (AutoCommit refusal, DryRun, TestLevel unit, Reviewer claude DryRun, Implementer codex DryRun) still pass without changes to detection or context-collection scripts.
+- [ ] No file outside the Phase 5 allowed list is created or modified by the harness implementation itself.
+
+## Out of Scope for Phase 5
+
+- Iteration counts greater than `3`.
+- Auto-commit, auto-push, auto-deploy, auto-tag, auto-merge.
+- Dependency installation.
+- Permissive Codex sandbox modes.
+- Embedding raw source diffs or secret material in the fix prompt.

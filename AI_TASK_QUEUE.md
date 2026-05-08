@@ -18,5 +18,6 @@
 | T-002 | Add Phase 2 test detection and optional test execution      | done   | Conservative harness enhancement; no Codex/Claude execution yet       |
 | T-003 | Add Phase 3 Claude review prompt and optional reviewer execution | done | Reviewer-only; no Codex/fix loop yet                                  |
 | T-004 | Add Phase 4 Codex one-shot implementation support           | done   | One-shot implementer only; no retry/fix loop yet                      |
+| T-005 | Add Phase 5 bounded Codex ↔ Claude fix loop                 | done   | Opt-in via -EnableFixLoop; capped at 3 iterations; loop never bypasses safety |
 
 <!-- Add new tasks above this line -->

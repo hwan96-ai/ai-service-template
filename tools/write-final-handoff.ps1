@@ -18,7 +18,18 @@ param(
     [string]$CodexCommand = 'codex',
     [string]$CodexSandbox = 'workspace-write',
     [ValidateSet('prompt-only','exec')]
-    [string]$CodexRunMode = 'prompt-only'
+    [string]$CodexRunMode = 'prompt-only',
+    # ----- Phase 5 loop summary inputs -----
+    [switch]$EnableFixLoop,
+    [ValidateSet('tests','claude','tests-or-claude')]
+    [string]$FixTrigger = 'tests-or-claude',
+    [int]$MaxIterations = 1,
+    [int]$CompletedIterations = 1,
+    [ValidateSet('continue','stop','halt')]
+    [string]$TerminalAction = 'stop',
+    [string]$TerminalReason = '',
+    [int]$MaxChangedFiles = 0,
+    [int]$MaxDiffStatLines = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -176,18 +187,19 @@ if ($Implementer -eq 'none') {
     $implementerModeLabel = "prompt-only (mode=$CodexRunMode; sandbox=$CodexSandbox)"
 }
 
-# Result logic (Phase 4 Codex-aware + Phase 3 verdict-aware).
+# Result logic (Phase 5 loop-aware + Phase 4 Codex-aware + Phase 3 verdict-aware).
 # Priority order (top to bottom):
-#   1. tests-failed
-#   2. Codex executed via -RunImplementer but failed/unsupported
-#   3. Claude verdict block / request_changes
-#   4. Codex executed + tests passed + Claude approve
-#   5. Codex executed + tests passed (no Claude verdict)
-#   6. Codex executed + no automated verification available
-#   7. Codex executed (other)
-#   8. Codex prompt generated but not executed
-#   9. Claude verdict approve (without Codex execution)
-#  10. Phase 2 fallbacks (DryRun / TestLevel=none / noCommandsSelected / testsPassed / generic)
+#   1. Phase 5 halts (loop refused to continue for safety reasons)
+#   2. tests-failed
+#   3. Codex executed via -RunImplementer but failed/unsupported
+#   4. Claude verdict block / request_changes
+#   5. Codex executed + tests passed + Claude approve
+#   6. Codex executed + tests passed (no Claude verdict)
+#   7. Codex executed + no automated verification available
+#   8. Codex executed (other)
+#   9. Codex prompt generated but not executed
+#  10. Claude verdict approve (without Codex execution)
+#  11. Phase 2 fallbacks (DryRun / TestLevel=none / noCommandsSelected / testsPassed / generic)
 $result = ''
 $testsFailed = ($null -ne $testSummary -and $testSummary.anyFailed)
 $testsPassed = ($null -ne $testSummary -and $testSummary.allPassed)
@@ -198,7 +210,25 @@ $noAutomatedVerification = (
     $noTestsFound
 )
 
-if ($testsFailed) {
+# Phase 5 halt reasons that override the standard result line.
+$phase5HaltReasons = @(
+    'secret-like-paths-in-diff',
+    'repeated-failure-fingerprint'
+)
+$phase5HaltExceededPrefix = @('max-changed-files-exceeded', 'max-diff-stat-exceeded')
+
+$loopHalted = ($TerminalAction -eq 'halt')
+$haltMatchesPhase5 = $false
+if ($loopHalted -and -not [string]::IsNullOrWhiteSpace($TerminalReason)) {
+    if ($phase5HaltReasons -contains $TerminalReason) { $haltMatchesPhase5 = $true }
+    foreach ($prefix in $phase5HaltExceededPrefix) {
+        if ($TerminalReason.StartsWith($prefix)) { $haltMatchesPhase5 = $true }
+    }
+}
+
+if ($haltMatchesPhase5) {
+    $result = ("fix loop halted by Phase 5 safety check ({0}) — manual review required" -f $TerminalReason)
+} elseif ($testsFailed) {
     $result = 'tests failed, manual review required'
 } elseif ($codexFailed) {
     $result = 'Codex implementation failed or was not executed safely — manual review required'
@@ -207,7 +237,11 @@ if ($testsFailed) {
 } elseif ($reviewExecuted -and $reviewVerdict -eq 'request_changes') {
     $result = 'Claude review verdict: request changes — manual review required'
 } elseif ($codexExecuted -and $reviewExecuted -and $reviewVerdict -eq 'approve' -and $testsPassed) {
-    $result = 'Codex ran, tests passed, Claude review approved — manual approval still required'
+    if ($EnableFixLoop -and $CompletedIterations -gt 1) {
+        $result = ("Codex <-> Claude fix loop converged after {0} iterations: tests passed, Claude review approved — manual approval still required" -f $CompletedIterations)
+    } else {
+        $result = 'Codex ran, tests passed, Claude review approved — manual approval still required'
+    }
 } elseif ($codexExecuted -and $testsPassed) {
     $result = 'Codex ran and tests passed — manual approval still required'
 } elseif ($codexExecuted -and $noAutomatedVerification) {
@@ -277,10 +311,56 @@ $paramLines += ("- RunImplementer: {0}" -f [bool]$RunImplementer)
 $paramLines += ("- CodexCommand: {0}" -f $CodexCommand)
 $paramLines += ("- CodexSandbox: {0}" -f $CodexSandbox)
 $paramLines += ("- CodexRunMode: {0}" -f $CodexRunMode)
+$paramLines += ("- EnableFixLoop: {0}" -f [bool]$EnableFixLoop)
+$paramLines += ("- FixTrigger: {0}" -f $FixTrigger)
+$paramLines += ("- MaxIterations: {0}" -f $MaxIterations)
+$paramLines += ("- CompletedIterations: {0}" -f $CompletedIterations)
+$paramLines += ("- TerminalAction: {0}" -f $TerminalAction)
+$paramLines += ("- TerminalReason: {0}" -f $TerminalReason)
+$paramLines += ("- MaxChangedFiles: {0}" -f $MaxChangedFiles)
+$paramLines += ("- MaxDiffStatLines: {0}" -f $MaxDiffStatLines)
+
+# Loop summary (read by reference; written by ai-autopilot.ps1)
+$loopSummaryPath = Join-Path $RunFolder 'loop-summary.json'
+$loopSummary = $null
+if (Test-Path -LiteralPath $loopSummaryPath) {
+    try {
+        $loopSummary = (Get-Content -LiteralPath $loopSummaryPath -Raw) | ConvertFrom-Json
+    } catch {
+        $loopSummary = $null
+    }
+}
+
+$loopLines = @()
+if ($null -eq $loopSummary) {
+    $loopLines += '(no loop summary available)'
+} else {
+    $loopLines += ("- EnableFixLoop: {0}" -f $loopSummary.enableFixLoop)
+    $loopLines += ("- FixTrigger: {0}" -f $loopSummary.fixTrigger)
+    $loopLines += ("- MaxIterations: {0}" -f $loopSummary.maxIterations)
+    $loopLines += ("- CompletedIterations: {0}" -f $loopSummary.completedIterations)
+    $loopLines += ("- TerminalAction: {0}" -f $loopSummary.terminalAction)
+    $loopLines += ("- TerminalReason: {0}" -f $loopSummary.terminalReason)
+    $loopLines += ("- MaxChangedFiles: {0}" -f $loopSummary.maxChangedFiles)
+    $loopLines += ("- MaxDiffStatLines: {0}" -f $loopSummary.maxDiffStatLines)
+    if ($null -ne $loopSummary.iterations -and (@($loopSummary.iterations).Count -gt 0)) {
+        $loopLines += ''
+        $loopLines += '| Iter | Codex | Tests Failed | Tests Passed | Review Verdict | Action | Reason |'
+        $loopLines += '| --- | --- | --- | --- | --- | --- | --- |'
+        foreach ($it in $loopSummary.iterations) {
+            $verdictDisplay = if ([string]::IsNullOrWhiteSpace([string]$it.reviewVerdict)) { '(none)' } else { [string]$it.reviewVerdict }
+            $loopLines += ("| {0} | {1} | {2} | {3} | {4} | {5} | {6} |" -f $it.iteration, $it.codexStatus, $it.testsAnyFailed, $it.testsAllPassed, $verdictDisplay, $it.action, $it.reason)
+        }
+    }
+}
 
 # Risks
 $risks = @()
-$risks += '- Phase 4 harness: Codex one-shot implementation runs only when -RunImplementer is explicitly set. Auto-fix loops, Codex ↔ Claude follow-ups, AutoCommit, push, and deploy remain disabled.'
+if ($EnableFixLoop) {
+    $risks += ('- Phase 5 fix loop was ENABLED. Codex <-> Claude bounded loop ran for {0}/{1} iterations (terminal action: {2}, reason: {3}). The loop never bypassed sandbox / approval safety.' -f $CompletedIterations, $MaxIterations, $TerminalAction, $TerminalReason)
+} else {
+    $risks += '- Phase 5 fix loop was DISABLED (default). Single-iteration behavior preserved; no Codex <-> Claude follow-ups; no automatic retries.'
+}
 $risks += '- Any uncommitted changes shown above are unverified local edits.'
 if ($noTestsFound) {
     $risks += '- No test runners were detected in this repository, so no automated validation is possible from this harness.'
@@ -301,7 +381,7 @@ if ($Implementer -eq 'codex' -and $codexFailed) {
     $risks += '- Automatic Codex implementation failed or was unsupported with the safe codex exec --sandbox workspace-write pattern. See codex-output.md. No permissive fallback was attempted.'
 }
 if ($Implementer -eq 'codex' -and $codexExecuted) {
-    $risks += '- Codex CLI made one-shot edits in the working tree. Review the post-Codex git status / diff above before committing anything.'
+    $risks += '- Codex CLI made edits in the working tree. Review the post-Codex git status / diff above before committing anything.'
 }
 if ($Reviewer -eq 'claude' -and -not $RunReviewer) {
     $risks += '- Reviewer=claude was requested but Claude CLI was NOT invoked. Run the prompt manually or rerun with -RunReviewer after verifying local Claude CLI flags.'
@@ -309,15 +389,18 @@ if ($Reviewer -eq 'claude' -and -not $RunReviewer) {
 if ($Reviewer -eq 'claude' -and $RunReviewer -and -not $reviewExecuted) {
     $risks += '- Automatic Claude review could not be executed safely with the chosen review-only invocation pattern. See claude-review.md for details.'
 }
+if ($haltMatchesPhase5) {
+    $risks += ('- Phase 5 fix loop halted by safety check: {0}. The harness refused to run any further Codex iterations.' -f $TerminalReason)
+}
 
 # Next steps
 $nextSteps = @()
-$nextSteps += '1. Read this handoff, `test-output.txt` (if present), `codex-output.md` (if present), and `claude-review.md` (if present).'
+$nextSteps += '1. Read this handoff, `loop-summary.json`, the latest `iteration-XX-*.md`/`iteration-XX-decision.json`, `test-output.txt` (if present), `codex-output.md` (if present), and `claude-review.md` (if present).'
 $nextSteps += '2. Decide whether to commit. The harness will not commit, push, or deploy.'
 $nextSteps += '3. If `noTestsFound` is true, treat the run as "manual review required" — there is no automated verification.'
-$nextSteps += '4. If Codex was prompt-only, hand `codex-implementation-prompt.md` to a local Codex CLI session yourself, or rerun with `-RunImplementer` after verifying `codex exec --help` and `codex status`.'
+$nextSteps += '4. If Codex was prompt-only, hand `codex-implementation-prompt.md` (and `codex-fix-prompt.md` for later iterations) to a local Codex CLI session yourself, or rerun with `-RunImplementer` after verifying `codex exec --help` and `codex status`.'
 $nextSteps += '5. If a Claude review verdict is missing or non-`approve`, address blocking issues before approval.'
-$nextSteps += '6. Phase 4 still defers Codex ↔ Claude fix loops, automatic retries, AutoCommit, push, and deploy.'
+$nextSteps += '6. The fix loop is opt-in via `-EnableFixLoop` and capped at `-MaxIterations 3`. AutoCommit, push, deploy, and dependency installation remain forbidden in every iteration.'
 
 # Suggested manual verification
 $verifySteps = @()
@@ -325,6 +408,7 @@ $verifySteps += '- Inspect `git status --short` and the `Files Changed` section 
 $verifySteps += '- Re-run with `-DryRun` to regenerate detection without executing anything.'
 $verifySteps += '- For unit-level local validation, use `-TestLevel unit`. Avoid E2E unless you intend it.'
 $verifySteps += '- To explicitly avoid E2E even at higher TestLevel, pass `-SkipE2E`.'
+$verifySteps += '- To preview a multi-iteration loop without executing Codex/Claude, combine `-EnableFixLoop -MaxIterations 2 -DryRun`.'
 
 $lines = @()
 $lines += '# AI Final Handoff'
@@ -343,11 +427,15 @@ $lines += $RunFolder
 $lines += ''
 $lines += '## Autopilot Phase'
 $lines += ''
-$lines += 'Phase 4 (Codex one-shot implementer prompt + optional one-shot codex exec; Claude review reviewer-only; auto-fix loops / commit / push / deploy still disabled)'
+$lines += 'Phase 5 (bounded Codex <-> Claude fix loop, opt-in via -EnableFixLoop, capped at -MaxIterations 3; Claude review remains reviewer-only; auto-commit / push / deploy / dependency installation still disabled)'
 $lines += ''
 $lines += '## Parameters'
 $lines += ''
 $lines += ($paramLines -join [Environment]::NewLine)
+$lines += ''
+$lines += '## Loop Summary'
+$lines += ''
+$lines += ($loopLines -join [Environment]::NewLine)
 $lines += ''
 $lines += '## Files Changed'
 $lines += ''
