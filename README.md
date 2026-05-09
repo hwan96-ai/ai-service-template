@@ -1,5 +1,7 @@
 # AI Service Template
 
+[![Pester Safety Tests](https://github.com/hwan96-ai/ai-service-template/actions/workflows/pester.yml/badge.svg)](https://github.com/hwan96-ai/ai-service-template/actions/workflows/pester.yml)
+
 Local safety harness for Codex CLI and Claude Code CLI in real repos.
 
 You want Codex CLI or Claude Code CLI to help in a real repository. You do not want them to commit, push, deploy, install packages, or bypass review. This project is the local safety layer between those AI tools and your repository.

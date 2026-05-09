@@ -1,0 +1,20 @@
+name: Pester Safety Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  pester:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run Pester safety tests
+        shell: powershell
+        run: Invoke-Pester -Path .\tests\AIServiceTemplate.Safety.Tests.ps1
