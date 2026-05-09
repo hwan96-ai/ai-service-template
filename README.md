@@ -12,6 +12,32 @@ The current implementation is Windows + PowerShell focused. The default posture 
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md).
 
+## When To Use This
+
+Use this template when you want a local safety layer around Codex CLI and Claude
+Code CLI before using them in a real service repository. It is a good fit when
+you want dry-run and prompt-only defaults, explicit opt-in before AI execution,
+local run artifacts, a final `AI_FINAL_HANDOFF.md`, and human-controlled commit
+and push decisions.
+
+This template is not a good fit when you want a hosted coding service, full
+automation, automatic commits or deploys, dependency installation, permissive
+sandbox flags, or a guarantee that every trusted repo script is side-effect
+free. The harness adds reviewable gates and conservative defaults; it does not
+claim full security or replace human judgment.
+
+```mermaid
+flowchart TD
+    A[Customize control docs] --> B[Run dry-run or prompt-only mode]
+    B --> C[Review local ai-runs artifacts]
+    C --> D[Read AI_FINAL_HANDOFF.md]
+    D --> E{Human approves next step?}
+    E -- No --> F[Stop, revise, or discard locally]
+    E -- Yes --> G[Optionally opt in to Codex or Claude execution]
+    G --> H[Review diff, checks, and handoff]
+    H --> I[Human commits and pushes manually]
+```
+
 ## Requirements
 
 For baseline dry-run and prompt-only use:
