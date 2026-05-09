@@ -4,7 +4,7 @@ Local safety harness for Codex CLI and Claude Code CLI in real repos.
 
 You want Codex CLI or Claude Code CLI to help in a real repository. You do not want them to commit, push, deploy, install packages, or bypass review. This project is the local safety layer between those AI tools and your repository.
 
-This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workflow scripts, prompts, guardrails, test detection, and final handoff artifacts around those tools. The `/goal` and `/ralph` workflow prompts describe what to do, but they are not the full runtime: end-to-end execution still requires local CLI setup, authentication, and explicit script flags.
+This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workflow scripts, prompts, guardrails, test detection, and final handoff artifacts around those tools. `/goal` and `/ralph` are workflow prompt conventions for Codex CLI / Claude Code style sessions, not PowerShell commands and not the full runtime. End-to-end execution still requires local CLI setup, authentication, and explicit script flags.
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
@@ -14,15 +14,21 @@ For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECUR
 
 ## Requirements
 
+For baseline dry-run and prompt-only use:
+
 - Windows 10/11
 - PowerShell 5.1 or newer
 - Git, with Git for Windows recommended
+- The copied harness files in the target service repo
+
+For real AI execution, also add:
+
 - Codex CLI installed and authenticated for real Codex execution
 - Claude Code CLI installed and authenticated for real Claude review
 - ChatGPT/OpenAI account capable of using Codex
 - Claude account capable of using Claude Code
 
-Prompt-only and dry-run checks can be useful before both CLIs are ready. End-to-end local AI execution needs the CLI tools and accounts above.
+Prompt-only and dry-run checks can be useful before both CLIs are ready.
 
 ## Optional Tools
 
@@ -62,6 +68,8 @@ Invoke-Pester -Path .\tests\AIServiceTemplate.Safety.Tests.ps1
 The tests use temporary directories and do not invoke Codex CLI or Claude Code CLI.
 
 ## 2-Minute Quickstart
+
+If you cloned this template repo, first preview or copy it into a target service repo with `tools/copy-template-to-service.ps1`, or use the template repo only for inspection. The `cd D:\your-service-repo` commands below assume the harness files already exist in that target service repo.
 
 Start with dry-run and prompt-only modes. These commands create local review artifacts, but they do not run real Codex or Claude, do not run tests, and do not commit, push, deploy, install dependencies, or use permissive sandbox flags.
 

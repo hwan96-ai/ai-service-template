@@ -356,6 +356,7 @@ Describe 'Public release safety regressions' {
         { $manifest | ConvertFrom-Json } | Should Not Throw
         $manifest | Should Not Match 'Run safe unit-level tests'
         $manifest | Should Match 'Run selected unit-level local checks from a trusted repository'
+        ((($manifest | ConvertFrom-Json).requiredFiles) -contains 'SECURITY.md') | Should Be $true
 
         $sampleHandoff = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'examples\sample-AI_FINAL_HANDOFF.md') -Raw
         $sampleHandoff | Should Not Match 'Confirm detected test commands are safe and expected'
@@ -369,5 +370,26 @@ Describe 'Public release safety regressions' {
         $fixPrompt | Should Match 'token'
         $fixPrompt | Should Match 'credential'
         $fixPrompt | Should Match 'credentials\.json'
+    }
+
+    It 'keeps review and implementation prompt safety wording aligned' {
+        $claudePromptScript = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\write-claude-review-prompt.ps1') -Raw
+        $codexPromptScript = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\write-codex-implementation-prompt.ps1') -Raw
+
+        $claudePromptScript | Should Match '## Test Output Notice'
+        $claudePromptScript | Should Not Match '## Test Output \(head\)'
+
+        foreach ($pattern in @(
+            '\.env',
+            '\.env\.\*',
+            '\*\.pem',
+            '\*\.key',
+            '\*secret\*',
+            '\*token\*',
+            '\*credential\*',
+            'credentials\.json'
+        )) {
+            $codexPromptScript | Should Match $pattern
+        }
     }
 }
