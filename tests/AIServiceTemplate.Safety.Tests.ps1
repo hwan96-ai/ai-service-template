@@ -67,6 +67,7 @@ Describe 'AI Service Template safety guardrails' {
     It 'keeps DryRun from invoking Codex or Claude even when run flags are present' -Skip:(-not (Get-Command git -ErrorAction SilentlyContinue)) {
         $repo = New-TemplateRuntimeRepo
         $autopilot = Join-Path $repo 'tools\ai-autopilot.ps1'
+        Assert-True (Test-Path -LiteralPath $autopilot) "Expected copied autopilot script to exist at <$autopilot>."
 
         $result = Invoke-ChildPowerShellScript `
             -ScriptPath $autopilot `
@@ -80,23 +81,45 @@ Describe 'AI Service Template safety guardrails' {
                 '-Goal', 'self-test dry run suppression'
             )
 
-        Assert-Equal $result.ExitCode 0
-        Assert-Match $result.Output 'DryRun is ON'
-        Assert-Match $result.Output 'DryRun suppressed -RunImplementer'
-        Assert-Match $result.Output 'DryRun suppressed -RunReviewer'
+        $dryRunExpectedOutput = @(
+            'DryRun is ON',
+            'DryRun suppressed -RunImplementer',
+            'DryRun suppressed -RunReviewer'
+        )
+        $dryRunFailureContext = @(
+            'DryRun child PowerShell process did not meet expectations.',
+            "Repo: $repo",
+            "Autopilot: $autopilot",
+            "ExitCode: $($result.ExitCode)",
+            ("Expected key strings: {0}" -f ($dryRunExpectedOutput -join ' | ')),
+            'Output:',
+            $result.Output
+        ) -join [Environment]::NewLine
+
+        Assert-Equal $result.ExitCode 0 $dryRunFailureContext
+        foreach ($expectedOutput in $dryRunExpectedOutput) {
+            Assert-Match $result.Output $expectedOutput ("Expected DryRun output to contain <$expectedOutput>.`n$dryRunFailureContext")
+        }
 
         $runFolder = Get-LatestRunFolder -RepoPath $repo
-        Assert-NotNullOrEmpty $runFolder
+        Assert-NotNullOrEmpty $runFolder ("Expected DryRun to create an ai-runs child folder.`n$dryRunFailureContext")
 
-        $codexOutput = Get-Content -LiteralPath (Join-Path $runFolder.FullName 'codex-output.md') -Raw
-        $claudeOutput = Get-Content -LiteralPath (Join-Path $runFolder.FullName 'claude-review.md') -Raw
-        $handoff = Get-Content -LiteralPath (Join-Path $runFolder.FullName 'AI_FINAL_HANDOFF.md') -Raw
+        $codexOutputPath = Join-Path $runFolder.FullName 'codex-output.md'
+        $claudeOutputPath = Join-Path $runFolder.FullName 'claude-review.md'
+        $handoffPath = Join-Path $runFolder.FullName 'AI_FINAL_HANDOFF.md'
+        Assert-True (Test-Path -LiteralPath $codexOutputPath) ("Expected DryRun Codex placeholder artifact at <$codexOutputPath>.`n$dryRunFailureContext")
+        Assert-True (Test-Path -LiteralPath $claudeOutputPath) ("Expected DryRun Claude placeholder artifact at <$claudeOutputPath>.`n$dryRunFailureContext")
+        Assert-True (Test-Path -LiteralPath $handoffPath) ("Expected DryRun final handoff artifact at <$handoffPath>.`n$dryRunFailureContext")
 
-        Assert-Match $codexOutput 'not executed - DryRun'
-        Assert-Match $codexOutput 'refused to invoke Codex CLI'
-        Assert-Match $claudeOutput 'not executed - DryRun'
-        Assert-Match $claudeOutput 'refused to invoke Claude CLI'
-        Assert-Match $handoff 'Human review'
+        $codexOutput = Get-Content -LiteralPath $codexOutputPath -Raw
+        $claudeOutput = Get-Content -LiteralPath $claudeOutputPath -Raw
+        $handoff = Get-Content -LiteralPath $handoffPath -Raw
+
+        Assert-Match $codexOutput 'not executed - DryRun' ("Expected Codex placeholder to prove DryRun suppression.`nPath: $codexOutputPath`nContent:`n$codexOutput")
+        Assert-Match $codexOutput 'refused to invoke Codex CLI' ("Expected Codex placeholder to prove Codex CLI was not invoked.`nPath: $codexOutputPath`nContent:`n$codexOutput")
+        Assert-Match $claudeOutput 'not executed - DryRun' ("Expected Claude placeholder to prove DryRun suppression.`nPath: $claudeOutputPath`nContent:`n$claudeOutput")
+        Assert-Match $claudeOutput 'refused to invoke Claude CLI' ("Expected Claude placeholder to prove Claude CLI was not invoked.`nPath: $claudeOutputPath`nContent:`n$claudeOutput")
+        Assert-Match $handoff 'Human review' ("Expected final handoff to preserve human-review gate.`nPath: $handoffPath`nContent:`n$handoff")
     }
 
     It 'redacts secret-like paths from git diff stat artifacts' -Skip:(-not (Get-Command git -ErrorAction SilentlyContinue)) {
