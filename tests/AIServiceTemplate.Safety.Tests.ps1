@@ -194,6 +194,27 @@ Describe 'AI Service Template safety guardrails' {
         Assert-False (Test-Path -LiteralPath (Join-Path $target 'ai-runs'))
     }
 
+    It 'keeps Windows PowerShell executed harness scripts ASCII-safe and parseable' {
+        $toolScripts = @(
+            'tools\detect-tests.ps1',
+            'tools\write-final-handoff.ps1'
+        )
+
+        foreach ($relativePath in $toolScripts) {
+            $scriptPath = Join-Path $script:RepoRoot $relativePath
+            $scriptText = Get-Content -LiteralPath $scriptPath -Raw
+            Assert-NotMatch $scriptText '[^\x00-\x7F]' "Expected <$relativePath> to contain ASCII-only executable script text for Windows PowerShell 5.1 compatibility."
+
+            $legacyDecodedText = [System.Text.Encoding]::Default.GetString([System.IO.File]::ReadAllBytes($scriptPath))
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.PSParser]::Tokenize($legacyDecodedText, [ref]$parseErrors) | Out-Null
+
+            $parseErrorText = (@($parseErrors) | ForEach-Object { $_.Message }) -join [Environment]::NewLine
+            Assert-Equal @($parseErrors).Count 0 "Expected <$relativePath> to parse cleanly after Windows PowerShell default-encoding decode. Parse errors:`n$parseErrorText"
+        }
+    }
+
     It 'documents forbidden safety terms in the manifest and harness' {
         $manifest = Get-Content -LiteralPath $script:ManifestPath -Raw | ConvertFrom-Json
         $combinedText = @(

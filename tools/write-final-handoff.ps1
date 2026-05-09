@@ -228,42 +228,42 @@ if ($loopHalted -and -not [string]::IsNullOrWhiteSpace($TerminalReason)) {
 }
 
 if ($haltMatchesPhase5) {
-    $result = ("fix loop halted by Phase 5 safety check ({0}) — manual review required" -f $TerminalReason)
+    $result = ("fix loop halted by Phase 5 safety check ({0}) - manual review required" -f $TerminalReason)
 } elseif ($testsFailed) {
     $result = 'tests failed, manual review required'
 } elseif ($codexFailed) {
-    $result = 'Codex implementation failed or was not executed safely — manual review required'
+    $result = 'Codex implementation failed or was not executed safely - manual review required'
 } elseif ($reviewExecuted -and $reviewVerdict -eq 'block') {
-    $result = 'Claude review verdict: block — manual review required'
+    $result = 'Claude review verdict: block - manual review required'
 } elseif ($reviewExecuted -and $reviewVerdict -eq 'request_changes') {
-    $result = 'Claude review verdict: request changes — manual review required'
+    $result = 'Claude review verdict: request changes - manual review required'
 } elseif ($codexExecuted -and $reviewExecuted -and $reviewVerdict -eq 'approve' -and $testsPassed) {
     if ($EnableFixLoop -and $CompletedIterations -gt 1) {
-        $result = ("Codex <-> Claude fix loop converged after {0} iterations: tests passed, Claude review approved — manual approval still required" -f $CompletedIterations)
+        $result = ("Codex <-> Claude fix loop converged after {0} iterations: tests passed, Claude review approved - manual approval still required" -f $CompletedIterations)
     } else {
-        $result = 'Codex ran, tests passed, Claude review approved — manual approval still required'
+        $result = 'Codex ran, tests passed, Claude review approved - manual approval still required'
     }
 } elseif ($codexExecuted -and $testsPassed) {
-    $result = 'Codex ran and tests passed — manual approval still required'
+    $result = 'Codex ran and tests passed - manual approval still required'
 } elseif ($codexExecuted -and $noAutomatedVerification) {
-    $result = 'Codex ran but no automated verification available — manual review required'
+    $result = 'Codex ran but no automated verification available - manual review required'
 } elseif ($codexExecuted) {
-    $result = 'Codex ran — manual review required'
+    $result = 'Codex ran - manual review required'
 } elseif ($Implementer -eq 'codex') {
     $result = 'manual review required (Codex prompt generated but not executed)'
 } elseif ($reviewExecuted -and $reviewVerdict -eq 'approve' -and $testsPassed) {
-    $result = 'Claude review approved and tests passed — manual approval still required'
+    $result = 'Claude review approved and tests passed - manual approval still required'
 } elseif ($reviewExecuted -and $reviewVerdict -eq 'approve') {
-    $result = 'Claude review approved (no automated verification of tests this run) — manual approval still required'
+    $result = 'Claude review approved (no automated verification of tests this run) - manual approval still required'
 } elseif ($null -ne $testSummary -and $testSummary.dryRun) {
     $result = 'manual review required (DryRun: tests not executed)'
 } elseif ($TestLevel -eq 'none') {
     $result = 'manual review required (TestLevel=none: tests not executed)'
 } elseif ($null -ne $testSummary -and $testSummary.noCommandsSelected) {
     if ($noTestsFound) {
-        $result = 'manual review required — no automated verification available (no tests detected in this repository)'
+        $result = 'manual review required - no automated verification available (no tests detected in this repository)'
     } else {
-        $result = 'manual review required — no commands matched the requested TestLevel/SkipE2E selection'
+        $result = 'manual review required - no commands matched the requested TestLevel/SkipE2E selection'
     }
 } elseif ($testsPassed) {
     $result = 'tests passed, manual review still required'
@@ -399,7 +399,7 @@ if ($haltMatchesPhase5) {
 $nextSteps = @()
 $nextSteps += '1. Read this handoff, `loop-summary.json`, the latest `iteration-XX-*.md`/`iteration-XX-decision.json`, `test-output.txt` (if present), `codex-output.md` (if present), and `claude-review.md` (if present).'
 $nextSteps += '2. Decide whether to commit. The harness will not commit, push, or deploy.'
-$nextSteps += '3. If `noTestsFound` is true, treat the run as "manual review required" — there is no automated verification.'
+$nextSteps += '3. If `noTestsFound` is true, treat the run as "manual review required" - there is no automated verification.'
 $nextSteps += '4. If Codex was prompt-only, hand `codex-implementation-prompt.md` (and `codex-fix-prompt.md` for later iterations) to a local Codex CLI session yourself, or rerun with `-RunImplementer` after verifying `codex exec --help` and `codex status`.'
 $nextSteps += '5. If a Claude review verdict is missing or non-`approve`, address blocking issues before approval.'
 $nextSteps += '6. The fix loop is opt-in via `-EnableFixLoop` and capped at `-MaxIterations 3`. AutoCommit, push, deploy, and dependency installation remain forbidden in every iteration.'
