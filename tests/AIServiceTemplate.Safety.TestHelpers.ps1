@@ -108,6 +108,50 @@ function Assert-DoesNotThrow {
     }
 }
 
+function ConvertTo-ProcessArgument {
+    param([AllowNull()][string]$Value)
+
+    if ($null -eq $Value) {
+        return '""'
+    }
+
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+
+    $builder = New-Object System.Text.StringBuilder
+    [void]$builder.Append('"')
+    $backslashes = 0
+
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq '\') {
+            $backslashes++
+            continue
+        }
+
+        if ($character -eq '"') {
+            [void]$builder.Append(('\' * (($backslashes * 2) + 1)))
+            [void]$builder.Append('"')
+            $backslashes = 0
+            continue
+        }
+
+        if ($backslashes -gt 0) {
+            [void]$builder.Append(('\' * $backslashes))
+            $backslashes = 0
+        }
+
+        [void]$builder.Append($character)
+    }
+
+    if ($backslashes -gt 0) {
+        [void]$builder.Append(('\' * ($backslashes * 2)))
+    }
+
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
 function New-SafetyTempDirectory {
     param([Parameter(Mandatory)][string]$Name)
 
@@ -127,17 +171,37 @@ function Invoke-ChildPowerShellScript {
 
     Initialize-SafetyTestContext
 
-    Push-Location -LiteralPath $WorkingDirectory
-    try {
-        $output = & $script:PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1
-        $exitCode = $LASTEXITCODE
-    } finally {
-        Pop-Location
+    $processArguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        $ScriptPath
+    ) + $Arguments
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $script:PowerShellExe
+    $startInfo.Arguments = (($processArguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' ')
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+
+    if (-not $process.Start()) {
+        throw "Failed to start child PowerShell process: $script:PowerShellExe"
     }
 
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
     return [pscustomobject]@{
-        ExitCode = $exitCode
-        Output   = (($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+        ExitCode = $process.ExitCode
+        Output   = (@($stdout, $stderr) | Where-Object { -not [string]::IsNullOrEmpty($_) }) -join [Environment]::NewLine
     }
 }
 
