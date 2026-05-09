@@ -86,3 +86,4 @@ If the issue involves a secret, private path, token, credential, or sensitive
 repository detail, do not paste it into a public issue. Redact the sensitive
 material first, or report only the minimal reproduction needed to understand the
 guardrail failure.
+Do not run this harness on repositories you do not trust.

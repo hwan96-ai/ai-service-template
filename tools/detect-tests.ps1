@@ -266,7 +266,8 @@ $lines += '## Test commands'
 $lines += ''
 if ($testCommands.Count -gt 0) {
     foreach ($c in $testCommands) {
-        $safeMark = if ($c.safeByDefault) { 'safe-by-default' } else { 'opt-in' }
+        # default-selected means eligible for default local selection, not side-effect-free.
+        $safeMark = if ($c.safeByDefault) { 'default-selected' } else { 'opt-in' }
         $lines += ("- **{0}** ({1}, {2}) — `{3}` in `{4}` — {5}" -f $c.id, $c.level, $safeMark, $c.command, $c.workingDirectory, $c.reason)
     }
 } else {

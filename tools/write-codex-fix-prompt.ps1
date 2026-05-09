@@ -57,7 +57,15 @@ function Block-OrPlaceholder {
 function Redact-IfSecret {
     param([string]$Line)
     if ([string]::IsNullOrWhiteSpace($Line)) { return $Line }
-    $patterns = @('(^|/)\.env(\.|$)', '\.pem$', '\.key$', 'secret', 'credentials')
+    $patterns = @(
+        '(^|[\\/\s])\.env(\.[^\\/\s|]*)?($|[\\/\s|])',
+        '\.pem($|[\s|])',
+        '\.key($|[\s|])',
+        'credentials\.json',
+        'secret',
+        'token',
+        'credential'
+    )
     foreach ($p in $patterns) {
         if ($Line -match $p) { return '[redacted secret-like path]' }
     }
@@ -196,7 +204,7 @@ $lines += ''
 $lines += '- Do NOT run `git commit`, `git push`, `git tag`, or any deploy command.'
 $lines += '- Do NOT install dependencies (`npm`, `pnpm`, `yarn`, `pip`, `poetry`, `uv`, etc.).'
 $lines += '- Do NOT modify `package.json`, lockfiles, or CI configuration unless the active task explicitly requires it.'
-$lines += '- Do NOT read or print secret material. Treat any path matching `.env`, `*.pem`, `*.key`, or `*secret*` as off-limits.'
+$lines += '- Do NOT read or print secret material. Treat any path matching `.env`, `.env.*`, `*.pem`, `*.key`, `*secret*`, `*token*`, `*credential*`, or `credentials.json` as off-limits.'
 $lines += '- Do NOT run destructive shell commands (`rm -rf`, `Remove-Item -Recurse -Force` outside the active run folder, `git reset --hard`, force pushes).'
 $lines += '- Do NOT modify files outside the repository root.'
 $lines += '- Do NOT modify files outside the allowed list for the current phase as defined in `AGENTS.md` / `CLAUDE.md`. If a fix appears to require expansion of scope, stop and report.'

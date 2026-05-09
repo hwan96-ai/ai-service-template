@@ -47,7 +47,7 @@ $diffStat     = Read-Artifact -Path (Join-Path $RunFolder 'git-diff-stat.txt')
 $diffNames    = Read-Artifact -Path (Join-Path $RunFolder 'git-diff-names.txt')
 $detectedMd   = Read-Artifact -Path (Join-Path $RunFolder 'detected-tests.md')
 $testSummary  = Read-Artifact -Path (Join-Path $RunFolder 'test-summary.json')
-$testOutTail  = Read-Artifact -Path (Join-Path $RunFolder 'test-output.txt') -MaxLines 80
+$testOutTail  = '[raw test output intentionally omitted/redacted for safety; test-output.txt is available only for local human review]'
 $handoffMd    = Read-Artifact -Path (Join-Path $RunFolder 'AI_FINAL_HANDOFF.md')
 
 $bt    = [char]96

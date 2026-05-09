@@ -88,7 +88,7 @@ Prompt artifacts: not generated in this dry-run smoke example.
 ## What The Human Should Review
 
 - Confirm the goal text matches the intended task.
-- Confirm detected test commands are safe and expected.
+- Confirm detected local checks are trusted, expected, and acceptable to run locally.
 - Confirm the git status and diff summary do not include unrelated changes.
 - Confirm no secret-like paths appear in the collected summaries.
 - Confirm the next run should remain prompt-only or should explicitly opt in to real Codex or Claude execution.

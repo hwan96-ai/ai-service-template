@@ -88,7 +88,7 @@
     },
     {
       "order": 2,
-      "purpose": "Run safe unit-level tests. No Codex, no Claude.",
+      "purpose": "Run selected unit-level local checks from a trusted repository. No Codex, no Claude.",
       "command": "powershell -ExecutionPolicy Bypass -File .\\tools\\ai-autopilot.ps1 -TestLevel unit -Goal \"unit validation\""
     },
     {

@@ -310,3 +310,64 @@ Describe 'AI Service Template safety guardrails' {
         $copyScriptText | Should Match '\.claude'
     }
 }
+
+Describe 'Public release safety regressions' {
+    BeforeAll {
+        $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath
+    }
+
+    It 'omits raw local check output from Claude review prompts' {
+        $scriptPath = Join-Path $script:RepoRoot 'tools\write-claude-review-prompt.ps1'
+        $tempRun = Join-Path ([System.IO.Path]::GetTempPath()) ('ai-service-template-claude-review-' + [Guid]::NewGuid().ToString('N'))
+
+        New-Item -ItemType Directory -Path $tempRun -Force | Out-Null
+
+        try {
+            Set-Content -Path (Join-Path $tempRun 'test-output.txt') -Encoding UTF8 -Value @(
+                'SECRET_TOKEN_SHOULD_NOT_APPEAR',
+                'fake-password',
+                'connection string'
+            )
+            Set-Content -Path (Join-Path $tempRun 'test-summary.json') -Encoding UTF8 -Value '{"status":"failed","failed":1,"passed":0}'
+            Set-Content -Path (Join-Path $tempRun 'git-status.txt') -Encoding UTF8 -Value ' M src/example.ps1'
+            Set-Content -Path (Join-Path $tempRun 'git-diff-stat.txt') -Encoding UTF8 -Value ' src/example.ps1 | 2 +-'
+            Set-Content -Path (Join-Path $tempRun 'git-diff-names.txt') -Encoding UTF8 -Value 'src/example.ps1'
+
+            & $scriptPath -RunFolder $tempRun
+
+            $promptPath = Join-Path $tempRun 'claude-review-prompt.md'
+            Test-Path -LiteralPath $promptPath | Should Be $true
+
+            $prompt = Get-Content -LiteralPath $promptPath -Raw
+            $prompt | Should Not Match 'SECRET_TOKEN_SHOULD_NOT_APPEAR'
+            $prompt | Should Not Match 'fake-password'
+            $prompt | Should Not Match 'connection string'
+            $prompt | Should Match 'raw test output intentionally omitted/redacted for safety'
+            $prompt | Should Match 'test-output\.txt is available only for local human review'
+        } finally {
+            if (Test-Path -LiteralPath $tempRun) {
+                Remove-Item -LiteralPath $tempRun -Recurse -Force
+            }
+        }
+    }
+
+    It 'uses trusted local-check wording in release-facing artifacts' {
+        $manifest = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'TEMPLATE_MANIFEST.json') -Raw
+        { $manifest | ConvertFrom-Json } | Should Not Throw
+        $manifest | Should Not Match 'Run safe unit-level tests'
+        $manifest | Should Match 'Run selected unit-level local checks from a trusted repository'
+
+        $sampleHandoff = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'examples\sample-AI_FINAL_HANDOFF.md') -Raw
+        $sampleHandoff | Should Not Match 'Confirm detected test commands are safe and expected'
+        $sampleHandoff | Should Match 'trusted, expected, and acceptable to run locally'
+
+        $detectTests = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\detect-tests.ps1') -Raw
+        $detectTests | Should Not Match 'safe-by-default'
+        $detectTests | Should Match 'default-selected'
+
+        $fixPrompt = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\write-codex-fix-prompt.ps1') -Raw
+        $fixPrompt | Should Match 'token'
+        $fixPrompt | Should Match 'credential'
+        $fixPrompt | Should Match 'credentials\.json'
+    }
+}
