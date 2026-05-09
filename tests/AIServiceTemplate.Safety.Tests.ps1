@@ -11,8 +11,120 @@ $script:PowerShellExe = (Get-Command powershell -ErrorAction Stop).Source
 $script:GitAvailable = $null -ne (Get-Command git -ErrorAction SilentlyContinue)
 $script:TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ai-service-template-safety-tests-{0}" -f ([System.Guid]::NewGuid().ToString('N')))
 
+function Get-SafetyRepoRoot {
+    return (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath
+}
+
+function Initialize-SafetyTestContext {
+    $script:RepoRoot = Get-SafetyRepoRoot
+    $script:AutopilotPath = Join-Path $script:RepoRoot 'tools\ai-autopilot.ps1'
+    $script:CollectContextPath = Join-Path $script:RepoRoot 'tools\collect-context.ps1'
+    $script:CopyScriptPath = Join-Path $script:RepoRoot 'tools\copy-template-to-service.ps1'
+    $script:ManifestPath = Join-Path $script:RepoRoot 'TEMPLATE_MANIFEST.json'
+    $script:GitignorePath = Join-Path $script:RepoRoot '.gitignore'
+    $script:PowerShellExe = (Get-Command powershell -ErrorAction Stop).Source
+    $script:GitAvailable = $null -ne (Get-Command git -ErrorAction SilentlyContinue)
+
+    if ([string]::IsNullOrWhiteSpace($script:TempRoot)) {
+        $script:TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ai-service-template-safety-tests-{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+    }
+}
+
+function Assert-True {
+    param(
+        [Parameter(Mandatory)][bool]$Condition,
+        [string]$Message = 'Expected condition to be true.'
+    )
+
+    if (-not $Condition) {
+        throw $Message
+    }
+}
+
+function Assert-False {
+    param(
+        [Parameter(Mandatory)][bool]$Condition,
+        [string]$Message = 'Expected condition to be false.'
+    )
+
+    if ($Condition) {
+        throw $Message
+    }
+}
+
+function Assert-Equal {
+    param(
+        $Actual,
+        $Expected,
+        [string]$Message = "Expected <$Expected> but got <$Actual>."
+    )
+
+    if ($Actual -ne $Expected) {
+        throw $Message
+    }
+}
+
+function Assert-NotEqual {
+    param(
+        $Actual,
+        $Expected,
+        [string]$Message = "Expected value not to equal <$Expected>."
+    )
+
+    if ($Actual -eq $Expected) {
+        throw $Message
+    }
+}
+
+function Assert-Match {
+    param(
+        [AllowNull()]$Actual,
+        [Parameter(Mandatory)][string]$Pattern,
+        [string]$Message = "Expected text to match pattern <$Pattern>."
+    )
+
+    if (($Actual -as [string]) -notmatch $Pattern) {
+        throw $Message
+    }
+}
+
+function Assert-NotMatch {
+    param(
+        [AllowNull()]$Actual,
+        [Parameter(Mandatory)][string]$Pattern,
+        [string]$Message = "Expected text not to match pattern <$Pattern>."
+    )
+
+    if (($Actual -as [string]) -match $Pattern) {
+        throw $Message
+    }
+}
+
+function Assert-NotNullOrEmpty {
+    param(
+        [AllowNull()]$Actual,
+        [string]$Message = 'Expected value not to be null or empty.'
+    )
+
+    if ($null -eq $Actual -or [string]::IsNullOrEmpty(($Actual -as [string]))) {
+        throw $Message
+    }
+}
+
+function Assert-DoesNotThrow {
+    param([Parameter(Mandatory)][scriptblock]$ScriptBlock)
+
+    try {
+        & $ScriptBlock | Out-Null
+    } catch {
+        throw "Expected script block not to throw, but it threw: $($_.Exception.Message)"
+    }
+}
+
 function New-SafetyTempDirectory {
     param([Parameter(Mandatory)][string]$Name)
+
+    Initialize-SafetyTestContext
 
     $path = Join-Path $script:TempRoot ("{0}-{1}" -f $Name, [System.Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $path -Force | Out-Null
@@ -25,6 +137,8 @@ function Invoke-ChildPowerShellScript {
         [string[]]$Arguments = @(),
         [Parameter(Mandatory)][string]$WorkingDirectory
     )
+
+    Initialize-SafetyTestContext
 
     Push-Location -LiteralPath $WorkingDirectory
     try {
@@ -41,6 +155,8 @@ function Invoke-ChildPowerShellScript {
 }
 
 function New-TemplateRuntimeRepo {
+    Initialize-SafetyTestContext
+
     $target = New-SafetyTempDirectory -Name 'runtime-repo'
 
     Push-Location -LiteralPath $target
@@ -76,6 +192,8 @@ function New-TemplateRuntimeRepo {
 function Get-LatestRunFolder {
     param([Parameter(Mandatory)][string]$RepoPath)
 
+    Initialize-SafetyTestContext
+
     $runRoot = Join-Path $RepoPath 'ai-runs'
     Get-ChildItem -LiteralPath $runRoot -Directory |
         Sort-Object LastWriteTime -Descending |
@@ -84,6 +202,7 @@ function Get-LatestRunFolder {
 
 Describe 'AI Service Template safety guardrails' {
     BeforeAll {
+        Initialize-SafetyTestContext
         New-Item -ItemType Directory -Path $script:TempRoot -Force | Out-Null
     }
 
@@ -109,9 +228,9 @@ Describe 'AI Service Template safety guardrails' {
             -WorkingDirectory $work `
             -Arguments @('-AutoCommit', '-Goal', 'self-test autocommit refusal')
 
-        $result.ExitCode | Should Not Be 0
-        $result.Output | Should Match 'AutoCommit is not permitted'
-        (Test-Path -LiteralPath (Join-Path $work 'ai-runs')) | Should Be $false
+        Assert-NotEqual $result.ExitCode 0
+        Assert-Match $result.Output 'AutoCommit is not permitted'
+        Assert-False (Test-Path -LiteralPath (Join-Path $work 'ai-runs'))
     }
 
     It 'refuses MaxIterations above the safety cap before creating run output' {
@@ -122,9 +241,9 @@ Describe 'AI Service Template safety guardrails' {
             -WorkingDirectory $work `
             -Arguments @('-MaxIterations', '4', '-Goal', 'self-test max iteration refusal')
 
-        $result.ExitCode | Should Not Be 0
-        $result.Output | Should Match 'MaxIterations must be between\s+1\s+and\s+3'
-        (Test-Path -LiteralPath (Join-Path $work 'ai-runs')) | Should Be $false
+        Assert-NotEqual $result.ExitCode 0
+        Assert-Match $result.Output 'MaxIterations must be between\s+1\s+and\s+3'
+        Assert-False (Test-Path -LiteralPath (Join-Path $work 'ai-runs'))
     }
 
     It 'refuses non-workspace-write CodexSandbox values before creating run output' {
@@ -136,10 +255,10 @@ Describe 'AI Service Template safety guardrails' {
                 -WorkingDirectory $work `
                 -Arguments @('-CodexSandbox', $sandbox, '-Goal', 'self-test codex sandbox refusal')
 
-            $result.ExitCode | Should Not Be 0
-            $result.Output | Should Match 'CodexSandbox is locked to\s+workspace-?\s*write'
-            ($result.Output -replace '\s+', '') | Should Match ([regex]::Escape(($sandbox -replace '\s+', '')))
-            (Test-Path -LiteralPath (Join-Path $work 'ai-runs')) | Should Be $false
+            Assert-NotEqual $result.ExitCode 0
+            Assert-Match $result.Output 'CodexSandbox is locked to\s+workspace-?\s*write'
+            Assert-Match ($result.Output -replace '\s+', '') ([regex]::Escape(($sandbox -replace '\s+', '')))
+            Assert-False (Test-Path -LiteralPath (Join-Path $work 'ai-runs'))
         }
     }
 
@@ -159,23 +278,23 @@ Describe 'AI Service Template safety guardrails' {
                 '-Goal', 'self-test dry run suppression'
             )
 
-        $result.ExitCode | Should Be 0
-        $result.Output | Should Match 'DryRun is ON'
-        $result.Output | Should Match 'DryRun suppressed -RunImplementer'
-        $result.Output | Should Match 'DryRun suppressed -RunReviewer'
+        Assert-Equal $result.ExitCode 0
+        Assert-Match $result.Output 'DryRun is ON'
+        Assert-Match $result.Output 'DryRun suppressed -RunImplementer'
+        Assert-Match $result.Output 'DryRun suppressed -RunReviewer'
 
         $runFolder = Get-LatestRunFolder -RepoPath $repo
-        $runFolder | Should Not BeNullOrEmpty
+        Assert-NotNullOrEmpty $runFolder
 
         $codexOutput = Get-Content -LiteralPath (Join-Path $runFolder.FullName 'codex-output.md') -Raw
         $claudeOutput = Get-Content -LiteralPath (Join-Path $runFolder.FullName 'claude-review.md') -Raw
         $handoff = Get-Content -LiteralPath (Join-Path $runFolder.FullName 'AI_FINAL_HANDOFF.md') -Raw
 
-        $codexOutput | Should Match 'not executed - DryRun'
-        $codexOutput | Should Match 'refused to invoke Codex CLI'
-        $claudeOutput | Should Match 'not executed - DryRun'
-        $claudeOutput | Should Match 'refused to invoke Claude CLI'
-        $handoff | Should Match 'Human review'
+        Assert-Match $codexOutput 'not executed - DryRun'
+        Assert-Match $codexOutput 'refused to invoke Codex CLI'
+        Assert-Match $claudeOutput 'not executed - DryRun'
+        Assert-Match $claudeOutput 'refused to invoke Claude CLI'
+        Assert-Match $handoff 'Human review'
     }
 
     It 'redacts secret-like paths from git diff stat artifacts' -Skip:(-not $script:GitAvailable) {
@@ -225,9 +344,9 @@ Describe 'AI Service Template safety guardrails' {
         $status = Get-Content -LiteralPath (Join-Path $runFolder 'git-status.txt') -Raw
 
         foreach ($artifactText in @($diffStat, $diffNames, $status)) {
-            $artifactText | Should Match '\[redacted secret-like path\]'
+            Assert-Match $artifactText '\[redacted secret-like path\]'
             foreach ($fragment in @('.env.local', 'service.pem', 'api.key', 'service-secret.txt', 'token-cache.txt', 'credentials.json', 'service-credential.txt')) {
-                $artifactText | Should Not Match ([regex]::Escape($fragment))
+                Assert-NotMatch $artifactText ([regex]::Escape($fragment))
             }
         }
     }
@@ -241,13 +360,13 @@ Describe 'AI Service Template safety guardrails' {
             -WorkingDirectory $script:RepoRoot `
             -Arguments @('-TargetRepo', $target)
 
-        $result.ExitCode | Should Be 0
-        $result.Output | Should Match 'PREVIEW'
-        $result.Output | Should Match 'no files were written'
+        Assert-Equal $result.ExitCode 0
+        Assert-Match $result.Output 'PREVIEW'
+        Assert-Match $result.Output 'no files were written'
 
-        (Test-Path -LiteralPath (Join-Path $target 'AI_PRODUCT_SPEC.md')) | Should Be $false
-        (Test-Path -LiteralPath (Join-Path $target 'tools')) | Should Be $false
-        (Test-Path -LiteralPath (Join-Path $target 'ai-runs')) | Should Be $false
+        Assert-False (Test-Path -LiteralPath (Join-Path $target 'AI_PRODUCT_SPEC.md'))
+        Assert-False (Test-Path -LiteralPath (Join-Path $target 'tools'))
+        Assert-False (Test-Path -LiteralPath (Join-Path $target 'ai-runs'))
     }
 
     It 'documents forbidden safety terms in the manifest and harness' {
@@ -267,13 +386,13 @@ Describe 'AI Service Template safety guardrails' {
             'yolo',
             'full-auto'
         )) {
-            $combinedText | Should Match ([regex]::Escape($term))
+            Assert-Match $combinedText ([regex]::Escape($term))
         }
 
-        $manifest.autoCommit | Should Be $false
-        $manifest.autoPush | Should Be $false
-        $manifest.autoDeploy | Should Be $false
-        $manifest.humanApprovalRequired | Should Be $true
+        Assert-False $manifest.autoCommit
+        Assert-False $manifest.autoPush
+        Assert-False $manifest.autoDeploy
+        Assert-True $manifest.humanApprovalRequired
     }
 
     It 'documents selected local checks as trusted-repository opt-in checks with script-internal limitations' {
@@ -285,11 +404,11 @@ Describe 'AI Service Template safety guardrails' {
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'SECURITY.md') -Raw
         ) -join [Environment]::NewLine
 
-        $combinedDocs | Should Match 'selected opt-in local checks from trusted repositories'
-        $combinedDocs | Should Match 'deny-lists wrapper command text'
-        $combinedDocs | Should Match 'cannot guarantee'
-        $combinedDocs | Should Match 'side effects'
-        $combinedDocs | Should Not Match 'safe tests'
+        Assert-Match $combinedDocs 'selected opt-in local checks from trusted repositories'
+        Assert-Match $combinedDocs 'deny-lists wrapper command text'
+        Assert-Match $combinedDocs 'cannot guarantee'
+        Assert-Match $combinedDocs 'side effects'
+        Assert-NotMatch $combinedDocs 'safe tests'
     }
 
     It 'keeps generated run artifacts and Claude local state out of source control intent' {
@@ -297,23 +416,23 @@ Describe 'AI Service Template safety guardrails' {
         $manifest = Get-Content -LiteralPath $script:ManifestPath -Raw | ConvertFrom-Json
         $copyScriptText = Get-Content -LiteralPath $script:CopyScriptPath -Raw
 
-        $gitignoreText | Should Match 'ai-runs/\*'
-        $gitignoreText | Should Match '!ai-runs/\.gitkeep'
-        $gitignoreText | Should Match '\.claude/'
+        Assert-Match $gitignoreText 'ai-runs/\*'
+        Assert-Match $gitignoreText '!ai-runs/\.gitkeep'
+        Assert-Match $gitignoreText '\.claude/'
 
-        ($manifest.localArtifactPatterns -contains 'ai-runs/*') | Should Be $true
-        ($manifest.localArtifactPatterns -contains '.claude/') | Should Be $true
-        ($manifest.neverCopy -contains '.claude') | Should Be $true
-        ($manifest.neverCopy -contains 'ai-runs/[0-9]*') | Should Be $true
+        Assert-True ($manifest.localArtifactPatterns -contains 'ai-runs/*')
+        Assert-True ($manifest.localArtifactPatterns -contains '.claude/')
+        Assert-True ($manifest.neverCopy -contains '.claude')
+        Assert-True ($manifest.neverCopy -contains 'ai-runs/[0-9]*')
 
-        $copyScriptText | Should Match 'ai-runs/\.gitkeep'
-        $copyScriptText | Should Match '\.claude'
+        Assert-Match $copyScriptText 'ai-runs/\.gitkeep'
+        Assert-Match $copyScriptText '\.claude'
     }
 }
 
 Describe 'Public release safety regressions' {
     BeforeAll {
-        $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath
+        Initialize-SafetyTestContext
     }
 
     It 'omits raw local check output from Claude review prompts' {
@@ -336,14 +455,14 @@ Describe 'Public release safety regressions' {
             & $scriptPath -RunFolder $tempRun
 
             $promptPath = Join-Path $tempRun 'claude-review-prompt.md'
-            Test-Path -LiteralPath $promptPath | Should Be $true
+            Assert-True (Test-Path -LiteralPath $promptPath)
 
             $prompt = Get-Content -LiteralPath $promptPath -Raw
-            $prompt | Should Not Match 'SECRET_TOKEN_SHOULD_NOT_APPEAR'
-            $prompt | Should Not Match 'fake-password'
-            $prompt | Should Not Match 'connection string'
-            $prompt | Should Match 'raw test output intentionally omitted/redacted for safety'
-            $prompt | Should Match 'test-output\.txt is available only for local human review'
+            Assert-NotMatch $prompt 'SECRET_TOKEN_SHOULD_NOT_APPEAR'
+            Assert-NotMatch $prompt 'fake-password'
+            Assert-NotMatch $prompt 'connection string'
+            Assert-Match $prompt 'raw test output intentionally omitted/redacted for safety'
+            Assert-Match $prompt 'test-output\.txt is available only for local human review'
         } finally {
             if (Test-Path -LiteralPath $tempRun) {
                 Remove-Item -LiteralPath $tempRun -Recurse -Force
@@ -353,31 +472,31 @@ Describe 'Public release safety regressions' {
 
     It 'uses trusted local-check wording in release-facing artifacts' {
         $manifest = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'TEMPLATE_MANIFEST.json') -Raw
-        { $manifest | ConvertFrom-Json } | Should Not Throw
-        $manifest | Should Not Match 'Run safe unit-level tests'
-        $manifest | Should Match 'Run selected unit-level local checks from a trusted repository'
-        ((($manifest | ConvertFrom-Json).requiredFiles) -contains 'SECURITY.md') | Should Be $true
+        Assert-DoesNotThrow { $manifest | ConvertFrom-Json }
+        Assert-NotMatch $manifest 'Run safe unit-level tests'
+        Assert-Match $manifest 'Run selected unit-level local checks from a trusted repository'
+        Assert-True ((($manifest | ConvertFrom-Json).requiredFiles) -contains 'SECURITY.md')
 
         $sampleHandoff = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'examples\sample-AI_FINAL_HANDOFF.md') -Raw
-        $sampleHandoff | Should Not Match 'Confirm detected test commands are safe and expected'
-        $sampleHandoff | Should Match 'trusted, expected, and acceptable to run locally'
+        Assert-NotMatch $sampleHandoff 'Confirm detected test commands are safe and expected'
+        Assert-Match $sampleHandoff 'trusted, expected, and acceptable to run locally'
 
         $detectTests = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\detect-tests.ps1') -Raw
-        $detectTests | Should Not Match 'safe-by-default'
-        $detectTests | Should Match 'default-selected'
+        Assert-NotMatch $detectTests 'safe-by-default'
+        Assert-Match $detectTests 'default-selected'
 
         $fixPrompt = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\write-codex-fix-prompt.ps1') -Raw
-        $fixPrompt | Should Match 'token'
-        $fixPrompt | Should Match 'credential'
-        $fixPrompt | Should Match 'credentials\.json'
+        Assert-Match $fixPrompt 'token'
+        Assert-Match $fixPrompt 'credential'
+        Assert-Match $fixPrompt 'credentials\.json'
     }
 
     It 'keeps review and implementation prompt safety wording aligned' {
         $claudePromptScript = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\write-claude-review-prompt.ps1') -Raw
         $codexPromptScript = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools\write-codex-implementation-prompt.ps1') -Raw
 
-        $claudePromptScript | Should Match '## Test Output Notice'
-        $claudePromptScript | Should Not Match '## Test Output \(head\)'
+        Assert-Match $claudePromptScript '## Test Output Notice'
+        Assert-NotMatch $claudePromptScript '## Test Output \(head\)'
 
         foreach ($pattern in @(
             '\.env',
@@ -389,7 +508,7 @@ Describe 'Public release safety regressions' {
             '\*credential\*',
             'credentials\.json'
         )) {
-            $codexPromptScript | Should Match $pattern
+            Assert-Match $codexPromptScript $pattern
         }
     }
 }
