@@ -179,29 +179,53 @@ function Invoke-ChildPowerShellScript {
         $ScriptPath
     ) + $Arguments
 
-    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = $script:PowerShellExe
-    $startInfo.Arguments = (($processArguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' ')
-    $startInfo.WorkingDirectory = $WorkingDirectory
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.CreateNoWindow = $true
+    $captureRoot = New-SafetyTempDirectory -Name 'child-process'
+    $stdoutPath = Join-Path $captureRoot 'stdout.txt'
+    $stderrPath = Join-Path $captureRoot 'stderr.txt'
+    $argumentList = (($processArguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' ')
 
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $startInfo
+    try {
+        $process = Start-Process `
+            -FilePath $script:PowerShellExe `
+            -ArgumentList $argumentList `
+            -WorkingDirectory $WorkingDirectory `
+            -NoNewWindow `
+            -Wait `
+            -PassThru `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -ErrorAction Stop
 
-    if (-not $process.Start()) {
-        throw "Failed to start child PowerShell process: $script:PowerShellExe"
+        if ($null -eq $process) {
+            throw "Failed to start child PowerShell process: $script:PowerShellExe"
+        }
+    } catch {
+        throw "Failed to start child PowerShell process: $script:PowerShellExe. $($_.Exception.Message)"
     }
 
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
+    try {
+        $stdout = if (Test-Path -LiteralPath $stdoutPath) {
+            Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue
+        } else {
+            ''
+        }
 
-    return [pscustomobject]@{
-        ExitCode = $process.ExitCode
-        Output   = (@($stdout, $stderr) | Where-Object { -not [string]::IsNullOrEmpty($_) }) -join [Environment]::NewLine
+        $stderr = if (Test-Path -LiteralPath $stderrPath) {
+            Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+        } else {
+            ''
+        }
+
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output   = (@($stdout, $stderr) | Where-Object { -not [string]::IsNullOrEmpty($_) }) -join [Environment]::NewLine
+        }
+    } finally {
+        foreach ($capturePath in @($stdoutPath, $stderrPath)) {
+            if (Test-Path -LiteralPath $capturePath) {
+                Remove-Item -LiteralPath $capturePath -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 
