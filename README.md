@@ -14,6 +14,8 @@ The current implementation is Windows + PowerShell focused. The default posture 
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
+For contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## When To Use This
 
 Use this template when you want a local safety layer around Codex CLI and Claude
