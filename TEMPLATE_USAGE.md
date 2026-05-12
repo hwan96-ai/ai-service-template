@@ -58,6 +58,11 @@ The copy script does not copy `.git/`, `.claude/`, or timestamped `ai-runs/`
 folders. It does not delete files. It does not run git operations or dependency
 installers.
 
+Existing service `README.md` files are preserved by default. If the target
+already has a README, preview shows `[skip-existing-readme] README.md`; pass
+`-OverwriteReadme` only when you intentionally want to replace it with the
+template README.
+
 ## Validate The Install
 
 From the target repo:

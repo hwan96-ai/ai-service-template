@@ -4,6 +4,7 @@ param(
     [string]$TargetRepo,
     [switch]$Apply,
     [switch]$OverwriteControlDocs,
+    [switch]$OverwriteReadme,
     [switch]$IncludeLocalGitignoreRules
 )
 
@@ -57,6 +58,7 @@ if (-not (Test-Path -LiteralPath $targetGit)) {
 Write-Host ("[copy] Target repo:     {0}" -f $resolvedTarget)
 Write-Host ("[copy] Mode:            {0}" -f $(if ($Apply) { 'APPLY (will write files)' } else { 'PREVIEW (no files written)' }))
 Write-Host ("[copy] OverwriteControlDocs: {0}" -f [bool]$OverwriteControlDocs)
+Write-Host ("[copy] OverwriteReadme:      {0}" -f [bool]$OverwriteReadme)
 Write-Host ("[copy] IncludeLocalGitignoreRules: {0}" -f [bool]$IncludeLocalGitignoreRules)
 
 # ----- load manifest -----
@@ -144,6 +146,8 @@ foreach ($rel in $relativeFiles) {
     if ($targetExists) {
         if ($isControlDoc -and -not $OverwriteControlDocs) {
             $action = 'skip-existing-control-doc'
+        } elseif ($rel -eq 'README.md' -and -not $OverwriteReadme) {
+            $action = 'skip-existing-readme'
         } else {
             $action = 'overwrite'
         }
@@ -164,20 +168,25 @@ Write-Host ''
 Write-Host '[copy] --- File plan ---'
 $createCount = 0
 $overwriteCount = 0
-$skipCount = 0
+$skipControlDocCount = 0
+$skipReadmeCount = 0
 foreach ($entry in $plan) {
     Write-Host ("  [{0}] {1}" -f $entry.Action, $entry.Relative)
     switch ($entry.Action) {
         'create'                      { $createCount++ }
         'overwrite'                   { $overwriteCount++ }
-        'skip-existing-control-doc'   { $skipCount++ }
+        'skip-existing-control-doc'   { $skipControlDocCount++ }
+        'skip-existing-readme'        { $skipReadmeCount++ }
     }
 }
 Write-Host ''
-Write-Host ("[copy] Plan totals: create={0} overwrite={1} skip-existing-control-doc={2}" -f $createCount, $overwriteCount, $skipCount)
+Write-Host ("[copy] Plan totals: create={0} overwrite={1} skip-existing-control-doc={2} skip-existing-readme={3}" -f $createCount, $overwriteCount, $skipControlDocCount, $skipReadmeCount)
 
-if ($skipCount -gt 0 -and -not $OverwriteControlDocs) {
+if ($skipControlDocCount -gt 0 -and -not $OverwriteControlDocs) {
     Write-Host '[copy] NOTE: existing control documents are preserved. Pass -OverwriteControlDocs to replace them (only if you really mean to).'
+}
+if ($skipReadmeCount -gt 0 -and -not $OverwriteReadme) {
+    Write-Host '[copy] NOTE: existing README.md is preserved. Pass -OverwriteReadme to replace it (only if you really mean to).'
 }
 
 # ----- gitignore rules preview/apply -----
@@ -253,6 +262,11 @@ $skipApplyCount = 0
 foreach ($entry in $plan) {
     if ($entry.Action -eq 'skip-existing-control-doc') {
         Write-Host ("[copy] preserved (control doc, no overwrite): {0}" -f $entry.Relative)
+        $skipApplyCount++
+        continue
+    }
+    if ($entry.Action -eq 'skip-existing-readme') {
+        Write-Host ("[copy] preserved (readme, no overwrite): {0}" -f $entry.Relative)
         $skipApplyCount++
         continue
     }

@@ -208,6 +208,41 @@ Describe 'AI Service Template safety guardrails' {
         Assert-False (Test-Path -LiteralPath (Join-Path $target 'ai-runs'))
     }
 
+    It 'preserves an existing target README unless explicitly opted in' {
+        $target = New-SafetyTempDirectory -Name 'copy-readme-target'
+        New-Item -ItemType Directory -Path (Join-Path $target '.git') -Force | Out-Null
+        $readmePath = Join-Path $target 'README.md'
+        $originalReadme = 'service-specific readme'
+        Set-Content -LiteralPath $readmePath -Value $originalReadme -Encoding utf8
+
+        $previewResult = Invoke-ChildPowerShellScript `
+            -ScriptPath $script:CopyScriptPath `
+            -WorkingDirectory $script:RepoRoot `
+            -Arguments @('-TargetRepo', $target)
+
+        Assert-Equal $previewResult.ExitCode 0
+        Assert-Match $previewResult.Output '\[skip-existing-readme\] README\.md'
+        Assert-NotMatch $previewResult.Output '\[overwrite\] README\.md'
+        Assert-Equal ((Get-Content -LiteralPath $readmePath -Raw).Trim()) $originalReadme
+
+        $applyResult = Invoke-ChildPowerShellScript `
+            -ScriptPath $script:CopyScriptPath `
+            -WorkingDirectory $script:RepoRoot `
+            -Arguments @('-TargetRepo', $target, '-Apply')
+
+        Assert-Equal $applyResult.ExitCode 0
+        Assert-Match $applyResult.Output 'preserved \(readme, no overwrite\): README\.md'
+        Assert-Equal ((Get-Content -LiteralPath $readmePath -Raw).Trim()) $originalReadme
+
+        $overwritePreviewResult = Invoke-ChildPowerShellScript `
+            -ScriptPath $script:CopyScriptPath `
+            -WorkingDirectory $script:RepoRoot `
+            -Arguments @('-TargetRepo', $target, '-OverwriteReadme')
+
+        Assert-Equal $overwritePreviewResult.ExitCode 0
+        Assert-Match $overwritePreviewResult.Output '\[overwrite\] README\.md'
+    }
+
     It 'keeps Windows PowerShell executed harness scripts ASCII-safe and parseable' {
         $toolScripts = @(
             'tools\detect-tests.ps1',

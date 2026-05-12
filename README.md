@@ -101,6 +101,10 @@ The tests use temporary directories and do not invoke Codex CLI or Claude Code C
 
 If you cloned this template repo, first preview or copy it into a target service repo with `tools/copy-template-to-service.ps1`, or use the template repo only for inspection. The `cd D:\your-service-repo` commands below assume the harness files already exist in that target service repo.
 
+The copy script preserves an existing target `README.md` by default and reports
+`[skip-existing-readme] README.md` in the preview. Use `-OverwriteReadme` only
+when replacing the service README is intentional.
+
 Start with dry-run and prompt-only modes. These commands create local review artifacts, but they do not run real Codex or Claude, do not run tests, and do not commit, push, deploy, install dependencies, or use permissive sandbox flags.
 
 ```powershell
