@@ -70,7 +70,8 @@ function Assert-Match {
         [string]$Message = "Expected text to match pattern <$Pattern>."
     )
 
-    if (($Actual -as [string]) -notmatch $Pattern) {
+    $actualText = ConvertTo-AssertionText $Actual
+    if ($actualText -notmatch $Pattern) {
         throw $Message
     }
 }
@@ -82,9 +83,40 @@ function Assert-NotMatch {
         [string]$Message = "Expected text not to match pattern <$Pattern>."
     )
 
-    if (($Actual -as [string]) -match $Pattern) {
+    $actualText = ConvertTo-AssertionText $Actual
+    if ($actualText -match $Pattern) {
         throw $Message
     }
+}
+
+function ConvertTo-AssertionText {
+    param([AllowNull()]$Actual)
+
+    if ($null -eq $Actual) {
+        return ''
+    }
+
+    $text = if ($Actual -is [array]) {
+        (@($Actual) | ForEach-Object {
+            if ($null -eq $_) {
+                ''
+            } else {
+                $_.ToString()
+            }
+        }) -join [Environment]::NewLine
+    } else {
+        $Actual.ToString()
+    }
+
+    $normalizedLineEndings = $text -replace "`r`n?", "`n"
+    $lineBreaksAsSpaces = $normalizedLineEndings -replace "`n", ' '
+    $lineBreaksRemoved = $normalizedLineEndings -replace "`n", ''
+
+    return @(
+        $normalizedLineEndings,
+        $lineBreaksAsSpaces,
+        $lineBreaksRemoved
+    ) -join [Environment]::NewLine
 }
 
 function Assert-NotNullOrEmpty {

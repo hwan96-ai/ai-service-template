@@ -43,8 +43,15 @@ Describe 'AI Service Template safety guardrails' {
             -WorkingDirectory $work `
             -Arguments @('-MaxIterations', '4', '-Goal', 'self-test max iteration refusal')
 
+        $failureContext = @(
+            'MaxIterations safety-cap refusal did not meet expectations.',
+            "ExitCode: $($result.ExitCode)",
+            'Output:',
+            $result.Output
+        ) -join [Environment]::NewLine
+
         Assert-NotEqual $result.ExitCode 0
-        Assert-Match $result.Output 'MaxIterations must be between\s+1\s+and\s+3'
+        Assert-Match $result.Output 'MaxIterations must be between\s+1\s+and\s+3' $failureContext
         Assert-False (Test-Path -LiteralPath (Join-Path $work 'ai-runs'))
     }
 
@@ -57,9 +64,16 @@ Describe 'AI Service Template safety guardrails' {
                 -WorkingDirectory $work `
                 -Arguments @('-CodexSandbox', $sandbox, '-Goal', 'self-test codex sandbox refusal')
 
+            $failureContext = @(
+                "CodexSandbox refusal did not meet expectations for value <$sandbox>.",
+                "ExitCode: $($result.ExitCode)",
+                'Output:',
+                $result.Output
+            ) -join [Environment]::NewLine
+
             Assert-NotEqual $result.ExitCode 0
-            Assert-Match $result.Output 'CodexSandbox is locked to\s+workspace-?\s*write'
-            Assert-Match ($result.Output -replace '\s+', '') ([regex]::Escape(($sandbox -replace '\s+', '')))
+            Assert-Match $result.Output 'CodexSandbox is locked to\s+workspace-?\s*write' $failureContext
+            Assert-Match ($result.Output -replace '\s+', '') ([regex]::Escape(($sandbox -replace '\s+', ''))) $failureContext
             Assert-False (Test-Path -LiteralPath (Join-Path $work 'ai-runs'))
         }
     }
