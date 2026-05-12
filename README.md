@@ -10,7 +10,7 @@ This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workf
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-> Template version: `0.6.0`. See `TEMPLATE_CHANGELOG.md` for release history.
+> Template version: `0.6.4`. See `TEMPLATE_CHANGELOG.md` for release history.
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 

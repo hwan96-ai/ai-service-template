@@ -32,7 +32,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$TemplateVersion = '0.6.0'
+$TemplateVersion = '0.6.4'
 Write-Host ('=== ai-autopilot (Phase 6, TemplateVersion {0}) ===' -f $TemplateVersion)
 
 $LockedCodexSandbox = 'workspace-write'

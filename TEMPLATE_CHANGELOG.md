@@ -3,10 +3,19 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.0`
+> **Current template version:** `0.6.4`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.4 — Patch release metadata alignment
+
+Updated:
+
+- Preserved target `README.md` during template copy.
+- Dogfooding in `auto_resume` confirmed template install, smoke validation,
+  and prompt-only Codex flow.
+- Aligned internal template version metadata with `0.6.4`.
 
 ## Public release hardening
 
