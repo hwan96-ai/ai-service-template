@@ -183,7 +183,7 @@ Write-Host ''
 Write-Host ("[copy] Plan totals: create={0} overwrite={1} skip-existing-control-doc={2} skip-existing-readme={3}" -f $createCount, $overwriteCount, $skipControlDocCount, $skipReadmeCount)
 
 if ($skipControlDocCount -gt 0 -and -not $OverwriteControlDocs) {
-    Write-Host '[copy] NOTE: existing control documents are preserved. Pass -OverwriteControlDocs to replace them (only if you really mean to).'
+    Write-Host '[copy] NOTE: existing agent/control documents are preserved. Pass -OverwriteControlDocs to replace them (only if you really mean to).'
 }
 if ($skipReadmeCount -gt 0 -and -not $OverwriteReadme) {
     Write-Host '[copy] NOTE: existing README.md is preserved. Pass -OverwriteReadme to replace it (only if you really mean to).'

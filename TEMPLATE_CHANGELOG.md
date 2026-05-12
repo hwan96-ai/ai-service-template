@@ -3,10 +3,22 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.4`
+> **Current template version:** `0.6.5`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.5 - Quick-start agent bootstrap support
+
+Added:
+
+- `AI_AGENT_BOOTSTRAP.md` as the first-read entrypoint for AI coding agents.
+- `tools/install-ai-service-template.ps1` for a safer GitHub
+  download-then-run install pattern.
+- Copy support for the bootstrap doc into target repositories.
+- Default preservation for existing agent and AI control docs, including
+  `AGENTS.md`, `CLAUDE.md`, and `AI_AGENT_BOOTSTRAP.md`.
+- Clearer Claude Code entrypoint guidance through uppercase `CLAUDE.md`.
 
 ## 0.6.4 — Patch release metadata alignment
 

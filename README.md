@@ -10,7 +10,7 @@ This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workf
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-> Template version: `0.6.4`. See `TEMPLATE_CHANGELOG.md` for release history.
+> Template version: `0.6.5`. See `TEMPLATE_CHANGELOG.md` for release history.
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
@@ -97,6 +97,34 @@ Invoke-Pester -Path .\tests\AIServiceTemplate.Safety.Tests.ps1
 
 The tests use temporary directories and do not invoke Codex CLI or Claude Code CLI.
 
+## Install Into Another Repo
+
+Start from the repo where you want to install the harness. Run without `-Apply`
+first to preview the copy plan.
+
+```powershell
+cd D:\some-project
+
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.5/tools/install-ai-service-template.ps1"
+$p = "$env:TEMP\install-ai-service-template.ps1"
+Invoke-WebRequest $u -OutFile $p
+
+powershell -ExecutionPolicy Bypass -File $p `
+  -TargetRepo . `
+  -Version v0.6.5 `
+  -Apply `
+  -IncludeLocalGitignoreRules
+```
+
+The installer downloads the tagged GitHub archive, extracts it under `TEMP`,
+and runs the template copy script from that archive. It does not use
+pipe-to-execute.
+
+Existing `README.md`, `AGENTS.md`, `CLAUDE.md`, `AI_AGENT_BOOTSTRAP.md`, and AI
+control docs are preserved by default. After install, ask AI coding agents to
+read `AI_AGENT_BOOTSTRAP.md` first. This is a local human-in-the-loop safety
+harness, not a full automation framework or MCP server.
+
 ## 2-Minute Quickstart
 
 If you cloned this template repo, first preview or copy it into a target service repo with `tools/copy-template-to-service.ps1`, or use the template repo only for inspection. The `cd D:\your-service-repo` commands below assume the harness files already exist in that target service repo.
@@ -104,6 +132,9 @@ If you cloned this template repo, first preview or copy it into a target service
 The copy script preserves an existing target `README.md` by default and reports
 `[skip-existing-readme] README.md` in the preview. Use `-OverwriteReadme` only
 when replacing the service README is intentional.
+Existing agent and AI control docs are also preserved by default and report
+`[skip-existing-control-doc] <file>` in the preview. Use
+`-OverwriteControlDocs` only when replacing them is intentional.
 
 Start with dry-run and prompt-only modes. These commands create local review artifacts, but they do not run real Codex or Claude, do not run tests, and do not commit, push, deploy, install dependencies, or use permissive sandbox flags.
 
@@ -178,6 +209,7 @@ D:\ai-service-template
 |-- AI_ACCEPTANCE_CRITERIA.md
 |-- AI_TASK_QUEUE.md
 |-- AI_WORKFLOW.md
+|-- AI_AGENT_BOOTSTRAP.md
 |-- AGENTS.md
 |-- CLAUDE.md
 |-- README.md
@@ -197,6 +229,7 @@ D:\ai-service-template
     |-- write-claude-review-prompt.ps1
     |-- write-codex-implementation-prompt.ps1
     |-- write-codex-fix-prompt.ps1
+    |-- install-ai-service-template.ps1
     |-- copy-template-to-service.ps1
     `-- validate-template-install.ps1
 ```
@@ -207,6 +240,7 @@ D:\ai-service-template
 |------|------|
 | `tools/ai-autopilot.ps1` | Main local orchestrator. This is where a harness run starts. |
 | `AI_PRODUCT_SPEC.md` | Human-written service context for the target repo. |
+| `AI_AGENT_BOOTSTRAP.md` | First-read instructions for AI coding agents after install. |
 | `AI_TASK_QUEUE.md` | Human-written work queue for the target repo. |
 | `AI_ACCEPTANCE_CRITERIA.md` | Completion and safety criteria. |
 | `AGENTS.md` | Guardrails for Codex CLI. |

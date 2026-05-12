@@ -243,6 +243,74 @@ Describe 'AI Service Template safety guardrails' {
         Assert-Match $overwritePreviewResult.Output '\[overwrite\] README\.md'
     }
 
+    It 'includes the AI agent bootstrap document in copy previews' {
+        $target = New-SafetyTempDirectory -Name 'copy-bootstrap-target'
+        New-Item -ItemType Directory -Path (Join-Path $target '.git') -Force | Out-Null
+
+        $manifest = Get-Content -LiteralPath $script:ManifestPath -Raw | ConvertFrom-Json
+        Assert-True ($manifest.requiredFiles -contains 'AI_AGENT_BOOTSTRAP.md')
+        Assert-True ($manifest.controlDocuments -contains 'AI_AGENT_BOOTSTRAP.md')
+
+        $previewResult = Invoke-ChildPowerShellScript `
+            -ScriptPath $script:CopyScriptPath `
+            -WorkingDirectory $script:RepoRoot `
+            -Arguments @('-TargetRepo', $target)
+
+        Assert-Equal $previewResult.ExitCode 0
+        Assert-Match $previewResult.Output '\[create\] AI_AGENT_BOOTSTRAP\.md'
+        Assert-False (Test-Path -LiteralPath (Join-Path $target 'AI_AGENT_BOOTSTRAP.md'))
+    }
+
+    It 'preserves existing agent and control docs unless explicitly opted in' {
+        $target = New-SafetyTempDirectory -Name 'copy-agent-doc-target'
+        New-Item -ItemType Directory -Path (Join-Path $target '.git') -Force | Out-Null
+
+        $existingDocs = @(
+            'AGENTS.md',
+            'CLAUDE.md',
+            'AI_AGENT_BOOTSTRAP.md'
+        )
+
+        foreach ($doc in $existingDocs) {
+            Set-Content -LiteralPath (Join-Path $target $doc) -Value ("target-owned {0}" -f $doc) -Encoding utf8
+        }
+
+        $previewResult = Invoke-ChildPowerShellScript `
+            -ScriptPath $script:CopyScriptPath `
+            -WorkingDirectory $script:RepoRoot `
+            -Arguments @('-TargetRepo', $target)
+
+        Assert-Equal $previewResult.ExitCode 0
+        foreach ($doc in $existingDocs) {
+            Assert-Match $previewResult.Output ('\[skip-existing-control-doc\] {0}' -f [regex]::Escape($doc))
+            Assert-NotMatch $previewResult.Output ('\[overwrite\] {0}' -f [regex]::Escape($doc))
+        }
+
+        $applyResult = Invoke-ChildPowerShellScript `
+            -ScriptPath $script:CopyScriptPath `
+            -WorkingDirectory $script:RepoRoot `
+            -Arguments @('-TargetRepo', $target, '-Apply')
+
+        Assert-Equal $applyResult.ExitCode 0
+        foreach ($doc in $existingDocs) {
+            Assert-Match $applyResult.Output ("preserved \(control doc, no overwrite\): {0}" -f [regex]::Escape($doc))
+            Assert-Equal ((Get-Content -LiteralPath (Join-Path $target $doc) -Raw).Trim()) ("target-owned {0}" -f $doc)
+        }
+    }
+
+    It 'keeps the GitHub installer free of direct execution and release mutation patterns' {
+        $installerPath = Join-Path $script:RepoRoot 'tools\install-ai-service-template.ps1'
+        $installerText = Get-Content -LiteralPath $installerPath -Raw
+
+        Assert-NotMatch $installerText 'Invoke-Expression'
+        Assert-NotMatch $installerText 'iex\b'
+        Assert-NotMatch $installerText 'git\s+commit'
+        Assert-NotMatch $installerText 'git\s+push'
+        Assert-NotMatch $installerText 'git\s+tag'
+        Assert-NotMatch $installerText 'gh\s+release'
+        Assert-NotMatch $installerText '\bdeploy\b'
+    }
+
     It 'keeps Windows PowerShell executed harness scripts ASCII-safe and parseable' {
         $toolScripts = @(
             'tools\detect-tests.ps1',
