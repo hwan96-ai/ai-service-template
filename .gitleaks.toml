@@ -1,0 +1,21 @@
+# gitleaks configuration for ai-service-template
+#
+# This is an optional, conservative secret-scanning configuration for use with
+# gitleaks (https://github.com/gitleaks/gitleaks). It is not installed or run
+# by the harness. Contributors and maintainers may run gitleaks locally before
+# publishing or accepting changes.
+#
+# This file extends the gitleaks default ruleset rather than replacing it,
+# so the built-in detectors for common token formats remain active.
+
+title = "ai-service-template gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local artifact and per-machine state directories. Real secret-bearing files (.env, *.pem, *.key, *secret*) are intentionally NOT allowlisted."
+paths = [
+  '''(^|/)ai-runs/''',
+  '''(^|/)\.claude/''',
+]

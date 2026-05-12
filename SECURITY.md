@@ -76,6 +76,33 @@ continuing.
 - A human remains responsible for reviewing diffs, test results, AI output,
   Claude review results, and the final handoff.
 
+## Optional Secret Scanning
+
+Secret scanning is optional but recommended before publishing this repository
+or accepting pull requests. A minimal `.gitleaks.toml` is included at the
+repository root for use with [gitleaks](https://github.com/gitleaks/gitleaks).
+The harness does not install gitleaks and does not run it for you.
+
+If you have gitleaks installed locally, you can run a scan from the repo root,
+for example:
+
+```powershell
+gitleaks detect --source . --config .gitleaks.toml --redact
+```
+
+Notes:
+
+- The bundled config extends the gitleaks default ruleset and only allowlists
+  local artifact directories (`ai-runs/`, `.claude/`). Real secret-bearing
+  paths such as `.env`, `*.pem`, `*.key`, and `*secret*` are intentionally not
+  allowlisted.
+- Generated `ai-runs/` artifacts are local-only and remain ignored by git.
+  They may still contain sensitive tool output and should not be committed or
+  shared without review.
+- Secret scanning is a backstop, not a replacement for careful human review of
+  goals, prompts, diffs, test output, and the final handoff. A clean gitleaks
+  run does not prove the repository is free of secrets.
+
 ## If You Find A Safety Issue
 
 Open a public issue if the report does not contain secrets. Include the command

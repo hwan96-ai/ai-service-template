@@ -12,7 +12,7 @@ The current implementation is Windows + PowerShell focused. The default posture 
 
 > Template version: `0.6.0`. See `TEMPLATE_CHANGELOG.md` for release history.
 
-For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md).
+For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
 ## When To Use This
 
