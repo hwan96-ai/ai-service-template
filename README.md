@@ -10,7 +10,7 @@ This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workf
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-> Template version: `0.6.5`. See `TEMPLATE_CHANGELOG.md` for release history.
+> Template version: `0.6.7`. See `TEMPLATE_CHANGELOG.md` for release history.
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
@@ -105,20 +105,20 @@ first to preview the copy plan.
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.5/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.7/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # Preview first. No files are written.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.5 `
+  -Version v0.6.7 `
   -IncludeLocalGitignoreRules
 
 # If the preview looks safe, apply the install.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.5 `
+  -Version v0.6.7 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```

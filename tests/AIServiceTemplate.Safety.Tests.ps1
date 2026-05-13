@@ -311,6 +311,42 @@ Describe 'AI Service Template safety guardrails' {
         Assert-NotMatch $installerText '\bdeploy\b'
     }
 
+    It 'forwards copy-script arguments via a named-parameter hashtable splat' {
+        $installerPath = Join-Path $script:RepoRoot 'tools\install-ai-service-template.ps1'
+        $installerText = Get-Content -LiteralPath $installerPath -Raw
+
+        # The installer must build a hashtable of named copy-script
+        # parameters and splat it. The previous array-based forwarding form
+        # (e.g. @('-TargetRepo', $resolvedTarget)) was fragile and surfaced
+        # as "A positional parameter cannot be found that accepts argument
+        # '<path>'." against the published archive.
+        Assert-Match $installerText '\$copyParams\s*=\s*@\{'
+        Assert-Match $installerText 'TargetRepo\s*=\s*\$resolvedTarget'
+        Assert-Match $installerText '\$copyParams\[''Apply''\]\s*=\s*\$true'
+        Assert-Match $installerText '\$copyParams\[''IncludeLocalGitignoreRules''\]\s*=\s*\$true'
+        Assert-Match $installerText '&\s+\$copyScript\s+@copyParams'
+
+        # The fragile array-splat shape that triggered the v0.6.6 regression
+        # must not return. Detect either the array literal containing
+        # '-TargetRepo' or the @copyArgs splat at the call site.
+        Assert-NotMatch $installerText '@\(\s*''-TargetRepo'''
+        Assert-NotMatch $installerText '&\s+\$copyScript\s+@copyArgs'
+    }
+
+    It 'parses the installer cleanly and exposes the expected forwarding parameters' {
+        $installerPath = Join-Path $script:RepoRoot 'tools\install-ai-service-template.ps1'
+        $installerText = Get-Content -LiteralPath $installerPath -Raw
+
+        $parseErrors = $null
+        [System.Management.Automation.PSParser]::Tokenize($installerText, [ref]$parseErrors) | Out-Null
+        $parseErrorText = (@($parseErrors) | ForEach-Object { $_.Message }) -join [Environment]::NewLine
+        Assert-Equal @($parseErrors).Count 0 "Expected installer to parse cleanly. Parse errors:`n$parseErrorText"
+
+        Assert-Match $installerText '\[string\]\$TargetRepo\b'
+        Assert-Match $installerText '\[switch\]\$Apply\b'
+        Assert-Match $installerText '\[switch\]\$IncludeLocalGitignoreRules\b'
+    }
+
     It 'keeps Windows PowerShell executed harness scripts ASCII-safe and parseable' {
         $toolScripts = @(
             'tools\detect-tests.ps1',

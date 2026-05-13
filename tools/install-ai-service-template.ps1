@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$TargetRepo = '.',
-    [string]$Version = 'v0.6.5',
+    [string]$Version = 'v0.6.7',
     [switch]$Apply,
     [switch]$IncludeLocalGitignoreRules
 )
@@ -87,13 +87,21 @@ $copyScript = $copyScripts[0].FullName
 Write-Host ("[install] Copy script: {0}" -f $copyScript)
 Write-Host ("[install] Running copy script in {0} mode." -f $(if ($Apply) { 'apply' } else { 'preview' }))
 
-$copyArgs = @('-TargetRepo', $resolvedTarget)
+# Use a hashtable splat to forward named parameters to the copy script.
+# An earlier array-of-strings forwarding form was fragile across PowerShell
+# versions and could surface as:
+#   "A positional parameter cannot be found that accepts argument '<path>'."
+# Hashtable splat binds by parameter name and is robust against that class
+# of regression.
+$copyParams = @{
+    TargetRepo = $resolvedTarget
+}
 if ($Apply) {
-    $copyArgs += '-Apply'
+    $copyParams['Apply'] = $true
 }
 if ($IncludeLocalGitignoreRules) {
-    $copyArgs += '-IncludeLocalGitignoreRules'
+    $copyParams['IncludeLocalGitignoreRules'] = $true
 }
 
-& $copyScript @copyArgs
+& $copyScript @copyParams
 exit $LASTEXITCODE

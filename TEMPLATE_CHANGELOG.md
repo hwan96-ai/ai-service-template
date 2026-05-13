@@ -3,10 +3,28 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.5`
+> **Current template version:** `0.6.7`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.7 - Installer argument forwarding fix
+
+Fixed:
+
+- `tools/install-ai-service-template.ps1` now forwards `-TargetRepo`,
+  `-Apply`, and `-IncludeLocalGitignoreRules` to
+  `tools/copy-template-to-service.ps1` through a named-parameter
+  hashtable splat. The previous array-based forwarding could surface as
+  "A positional parameter cannot be found that accepts argument
+  '<path>'." against a published archive.
+
+Confirmed:
+
+- Preview-first install smoke path remains the default; `-Apply` is
+  still required to write files.
+- No runtime harness behavior changed. No new git, network, or
+  dependency-install side effects were introduced.
 
 ## 0.6.5 - Quick-start agent bootstrap support
 
