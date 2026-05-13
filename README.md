@@ -10,19 +10,36 @@
   <img src="assets/hero-banner.svg" alt="AI Service Template — local, preview-first AI coding safety harness for Codex CLI and Claude Code" width="100%">
 </p>
 
-> **Local, preview-first AI coding safety harness for Codex CLI and Claude Code — human-in-the-loop by default.**
+> **A Windows/PowerShell AI coding safety harness for Codex CLI and Claude Code. Preview-first. Human-in-the-loop by default.**
 
  한국어 안내: [README_KO.md](README_KO.md) ·  Deeper guide: [TEMPLATE_USAGE.md](TEMPLATE_USAGE.md) ·  Safety boundaries: [SECURITY.md](SECURITY.md)
 
-## At A Glance
+## What This Is
 
-| | Summary |
-| --- | --- |
-| **What it is** | Local safety layer around Codex CLI + Claude Code CLI: dry-run defaults, prompt-only artifacts, `AI_FINAL_HANDOFF.md` for human review. |
-| **What it is not** | Not a hosted coding service, not a CLI replacement, not an automation framework, not an MCP / plugin runtime. |
-| **Recommended version** | `v0.6.11` — preview-first; `-Apply` is required to write files. |
-| **Safety posture** | No auto-commit, no auto-push, no deploy, no dependency install, no permissive sandbox flags. |
-| **AI agents start here** | Read [`AI_AGENT_BOOTSTRAP.md`](AI_AGENT_BOOTSTRAP.md) first after install. |
+A Windows/PowerShell safety harness that wraps Codex CLI and Claude Code workflows in a preview-first process. You run dry-run and prompt-only commands first, inspect an `AI_FINAL_HANDOFF.md`, and only then opt in to real AI execution. The harness never commits, pushes, deploys, or installs dependencies on its own.
+
+This is **not** a generic service scaffold. It is **not** a SaaS framework, a hosted coding service, or an MCP / plugin runtime. It is **not** cross-platform today — Windows + PowerShell only.
+
+## Who It Is For
+
+Use this when you want AI help inside a real repository but do not want automatic commit, push, deploy, or install behavior. It fits developers who already use Codex CLI or Claude Code CLI and want a thin local layer of guardrails, prompt-only artifacts, and a human review gate around them.
+
+## Who It Is Not For
+
+It is not for users wanting a hosted AI coding service, full automation, automatic commits or deploys, or Linux/macOS-first shell support today. It does not replace human judgment; it produces artifacts for humans to review.
+
+## Smallest Useful Workflow
+
+1. Copy the harness into a target service repo (preview, then `-Apply`).
+2. Run a dry-run: `.\tools\ai-autopilot.ps1 -DryRun -Goal "..."`.
+3. Open the timestamped folder under `ai-runs/` and read `AI_FINAL_HANDOFF.md`.
+4. Only if the preview looks safe, opt in to real Codex or Claude execution with explicit flags.
+
+AI agents working in this repo should read [`AI_AGENT_BOOTSTRAP.md`](AI_AGENT_BOOTSTRAP.md) first.
+
+## Template Use (Secondary)
+
+This can be copied into a service repo as a starting point, but its primary value is the AI coding safety workflow, not service scaffolding. If you want a generic service template, this is not it.
 
 ## Workflow
 
@@ -40,20 +57,6 @@ You want Codex CLI or Claude Code CLI to help in a real repository, but you do n
 </details>
 
 > Template version: `0.6.11`. See [`TEMPLATE_CHANGELOG.md`](TEMPLATE_CHANGELOG.md) for release history. Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md). An optional `.gitleaks.toml` is included for local secret scanning; see "Optional Secret Scanning" in [SECURITY.md](SECURITY.md).
-
-## When To Use This
-
-Use this template when you want a local safety layer around Codex CLI and Claude
-Code CLI before using them in a real service repository. It is a good fit when
-you want dry-run and prompt-only defaults, explicit opt-in before AI execution,
-local run artifacts, a final `AI_FINAL_HANDOFF.md`, and human-controlled commit
-and push decisions.
-
-This template is not a good fit when you want a hosted coding service, full
-automation, automatic commits or deploys, dependency installation, permissive
-sandbox flags, or a guarantee that every trusted repo script is side-effect
-free. The harness adds reviewable gates and conservative defaults; it does not
-claim full security or replace human judgment.
 
 ## Requirements
 

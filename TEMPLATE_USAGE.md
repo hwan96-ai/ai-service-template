@@ -5,6 +5,24 @@ service repository. The harness wraps Codex CLI and Claude Code CLI with
 PowerShell scripts, conservative defaults, prompt generation, optional local
 checks, and a final handoff for human review.
 
+## You Don't Need To Read Everything First
+
+You do not need to understand every control document before your first preview
+run. Treat this guide as a reference, not a checklist. The minimum first-run
+path is short:
+
+1. Read the `README.md` opening (what this is, who it's for).
+2. Skim `AI_AGENT_BOOTSTRAP.md` so you know the default rules.
+3. Run a dry-run / preview command (see "Common Commands" below).
+4. Open the timestamped folder under `ai-runs/` and inspect
+   `AI_FINAL_HANDOFF.md` before applying anything or opting in to real AI
+   execution.
+
+The other control documents (`AI_PRODUCT_SPEC.md`, `AI_TASK_QUEUE.md`,
+`AI_ACCEPTANCE_CRITERIA.md`, `AI_WORKFLOW.md`) are worth filling in when you
+move past dry-run, but they are not gating prerequisites for your first preview.
+This is a personal safety harness, not a corporate onboarding process.
+
 ## When To Read This
 
 Read this after the README if you want to:

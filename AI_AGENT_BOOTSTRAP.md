@@ -5,15 +5,30 @@ installed into a service repo.
 
 ## Read Order
 
-Read these files before proposing or making changes:
+You do not need to read every control document before doing anything. The list
+below is tiered — start with the required reads, then pull in the reference
+docs as the task demands.
 
-1. `AI_AGENT_BOOTSTRAP.md`
-2. `AGENTS.md`
-3. `AI_PRODUCT_SPEC.md`
-4. `AI_TASK_QUEUE.md`
-5. `AI_ACCEPTANCE_CRITERIA.md`
-6. `AI_WORKFLOW.md`
-7. `CLAUDE.md` if you are Claude Code
+**Required first (every session):**
+
+1. `README.md` — what this harness is and what its smallest useful workflow looks like.
+2. `AI_AGENT_BOOTSTRAP.md` — this file.
+
+**Agent rules (read the one that applies to you):**
+
+- `AGENTS.md` if you are Codex CLI.
+- `CLAUDE.md` if you are Claude Code.
+
+**Reference as needed (read when the task actually requires it):**
+
+- `AI_PRODUCT_SPEC.md` — service context, scope, out-of-scope areas.
+- `AI_TASK_QUEUE.md` — active task and allow-list.
+- `AI_ACCEPTANCE_CRITERIA.md` — completion and safety criteria.
+- `AI_WORKFLOW.md` — full workflow detail.
+
+If the active task is a dry-run, preview, or prompt-only run, the required
+reads plus your agent rules file are usually enough. Pull in the reference docs
+before proposing real edits.
 
 ## Default Rules
 
