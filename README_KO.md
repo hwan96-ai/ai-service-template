@@ -4,9 +4,17 @@
 [![Latest Release](https://img.shields.io/github/v/release/hwan96-ai/ai-service-template?display_name=tag&sort=semver)](https://github.com/hwan96-ai/ai-service-template/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="assets/hero-banner.svg" alt="AI Service Template — 로컬 · 미리보기 우선 · 사람 중심 AI 코딩 안전 하네스" width="100%">
+</p>
+
 > Codex CLI 와 Claude Code CLI 를 실제 저장소에서 안전하게 쓰기 위한 **로컬 · 미리보기 우선 · 사람 중심(human-in-the-loop)** 안전 장치.
 
 원문 README 는 [README.md](README.md) 에 있습니다. 이 문서는 한국어 사용자를 위한 실용적인 요약입니다.
+
+<p align="center">
+  <img src="assets/workflow-overview.svg" alt="워크플로: 설치 → 부트스트랩 읽기 → dry-run 미리보기 → 사람 검토 게이트 → 명시적 opt-in 실행 → 사람이 직접 커밋" width="100%">
+</p>
 
 ---
 
@@ -54,20 +62,20 @@
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.10/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.11/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # 1) 미리보기 (파일은 아직 쓰이지 않음)
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.10 `
+  -Version v0.6.11 `
   -IncludeLocalGitignoreRules
 
 # 2) 미리보기가 안전해 보이면 적용
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.10 `
+  -Version v0.6.11 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```
@@ -109,7 +117,7 @@ powershell -ExecutionPolicy Bypass -File $p `
 
 이 하네스는 위 작업을 자동으로 수행하지 않으며, 그렇게 보이는 플래그(`--full-auto`, `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-skip-permissions` 등)도 기본값으로 사용하지 않습니다.
 
-## 9. v0.6.10 기준 빠른 사용 예시
+## 9. v0.6.11 기준 빠른 사용 예시
 
 대상 서비스 저장소에 하네스가 이미 설치되어 있다고 가정합니다.
 

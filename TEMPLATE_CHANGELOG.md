@@ -3,10 +3,45 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.10`
+> **Current template version:** `0.6.11`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.11 - Hero banner, static SVG workflow, README scannability
+
+Changed:
+
+- Added `assets/hero-banner.svg`, a lightweight text-based SVG hero
+  banner displayed at the top of `README.md` and `README_KO.md`. It
+  shows the product name and short chips for the project's safety
+  positioning (Local, Preview-first, Human-in-the-loop, Codex CLI,
+  Claude Code, Windows + PowerShell).
+- Added `assets/workflow-overview.svg`, a static SVG workflow diagram
+  that replaces the previous Mermaid block in `README.md`. The diagram
+  groups the preview-first stages (install → bootstrap → dry-run →
+  human review) and shows the optional opt-in execution and the
+  human-only commit step, with a revise loop back to dry-run.
+- `README.md` top section restructured for scannability: badges →
+  hero banner → tagline + quick links → "At A Glance" table →
+  static workflow image → quick install. Lower-priority context
+  moved into a `<details>` block. Mermaid block removed.
+- `README_KO.md` updated to reference the same hero and workflow SVGs
+  and pinned to `v0.6.11` in install examples and the usage section.
+- Displayed template version references bumped from `v0.6.10` to
+  `v0.6.11` in `README.md`, `README_KO.md`, and
+  `TEMPLATE_MANIFEST.json`.
+- `TEMPLATE_MANIFEST.json` `requiredFiles` now lists
+  `assets/hero-banner.svg` and `assets/workflow-overview.svg`.
+
+Confirmed:
+
+- Documentation and visual-polish only. No runtime behavior change.
+  No script, tool, installer, copy, or test behavior changed. No new
+  dependencies. No MCP or plugin behavior. No PNG/JPG/WebP assets —
+  the new images are text-based SVG. Install examples remain
+  preview-first (first block without `-Apply`, second block with
+  `-Apply`).
 
 ## 0.6.10 - Workflow diagram polish and Korean README
 

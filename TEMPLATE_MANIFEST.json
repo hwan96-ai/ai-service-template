@@ -1,6 +1,6 @@
 {
   "templateName": "ai-service-template",
-  "templateVersion": "0.6.10",
+  "templateVersion": "0.6.11",
   "phasesImplemented": [1, 2, 3, 4, 5, 6],
   "description": "Reusable, safety-first local AI automation harness. Coordinates Codex CLI (implementer), Claude Code CLI (reviewer), local tests, and a final human handoff without ever committing, pushing, deploying, or installing dependencies on its own.",
   "requiredFiles": [
@@ -17,7 +17,9 @@
     "TEMPLATE_USAGE.md",
     "TEMPLATE_CHANGELOG.md",
     "SERVICE_ONBOARDING_CHECKLIST.md",
-    "TEMPLATE_MANIFEST.json"
+    "TEMPLATE_MANIFEST.json",
+    "assets/hero-banner.svg",
+    "assets/workflow-overview.svg"
   ],
   "controlDocuments": [
     "AI_PRODUCT_SPEC.md",

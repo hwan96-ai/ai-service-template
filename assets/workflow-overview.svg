@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 360" role="img" aria-label="AI Service Template workflow: install, AI reads bootstrap, dry-run preview, human review gate, optional opt-in execution, human commits manually">
+  <title>AI Service Template Workflow</title>
+  <desc>Install → AI reads bootstrap → Dry-run / prompt-only preview → Human review gate → Optional opt-in execution → Human commits manually. Revise loop returns from the review gate to dry-run.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5a6b85"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b8860b"/>
+    </marker>
+    <style>
+      .label   { font: 600 14px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #0d1b2a; text-anchor: middle; }
+      .sub     { font: 400 12px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #3d4e6a; text-anchor: middle; }
+      .group   { font: 600 12px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #2e7d32; }
+      .edge    { font: 500 12px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5a6b85; text-anchor: middle; }
+      .loopLbl { font: 500 12px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #b8860b; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect width="1240" height="360" fill="#ffffff"/>
+
+  <!-- Preview-first group -->
+  <rect x="220" y="60" width="500" height="180" rx="14" fill="#f1f8f3" stroke="#7fb88f" stroke-dasharray="6 4"/>
+  <text x="240" y="84" class="group">Preview-first (default)</text>
+
+  <!-- Node 1: Install -->
+  <g>
+    <rect x="40" y="120" width="160" height="80" rx="10" fill="#eef3fb" stroke="#3a7bd5"/>
+    <text x="120" y="155" class="label">Install harness</text>
+    <text x="120" y="175" class="sub">copy-template-to-service</text>
+  </g>
+
+  <!-- Node 2: AI reads bootstrap -->
+  <g>
+    <rect x="240" y="120" width="200" height="80" rx="10" fill="#eef3fb" stroke="#3a7bd5"/>
+    <text x="340" y="150" class="label">AI reads bootstrap</text>
+    <text x="340" y="170" class="sub">AI_AGENT_BOOTSTRAP.md</text>
+    <text x="340" y="186" class="sub">Codex CLI · Claude Code</text>
+  </g>
+
+  <!-- Node 3: Dry-run / prompt-only -->
+  <g>
+    <rect x="475" y="120" width="200" height="80" rx="10" fill="#eef3fb" stroke="#3a7bd5"/>
+    <text x="575" y="150" class="label">Dry-run / prompt-only</text>
+    <text x="575" y="170" class="sub">no real AI execution</text>
+    <text x="575" y="186" class="sub">writes ai-runs/&lt;ts&gt;/</text>
+  </g>
+
+  <!-- Node 4: Human review gate (diamond-ish) -->
+  <g>
+    <polygon points="760,160 870,110 980,160 870,210" fill="#fff7df" stroke="#d4a017"/>
+    <text x="870" y="155" class="label">Human review</text>
+    <text x="870" y="175" class="sub">AI_FINAL_HANDOFF.md</text>
+  </g>
+
+  <!-- Node 5: Opt-in execution -->
+  <g>
+    <rect x="1010" y="120" width="190" height="80" rx="10" fill="#eaf3ff" stroke="#1565c0"/>
+    <text x="1105" y="150" class="label">Opt-in execution</text>
+    <text x="1105" y="170" class="sub">-RunImplementer</text>
+    <text x="1105" y="186" class="sub">-RunReviewer (bounded)</text>
+  </g>
+
+  <!-- Node 6: Human commits -->
+  <g>
+    <rect x="1010" y="260" width="190" height="74" rx="10" fill="#fdecef" stroke="#ad1457"/>
+    <text x="1105" y="290" class="label">Human commits</text>
+    <text x="1105" y="310" class="sub">git add / commit / push</text>
+  </g>
+
+  <!-- Edges -->
+  <line x1="200" y1="160" x2="240" y2="160" stroke="#5a6b85" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="440" y1="160" x2="475" y2="160" stroke="#5a6b85" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="675" y1="160" x2="760" y2="160" stroke="#5a6b85" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="980" y1="160" x2="1010" y2="160" stroke="#5a6b85" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="995" y="150" class="edge">approve</text>
+
+  <!-- Opt-in to commit -->
+  <path d="M1105,200 L1105,260" stroke="#5a6b85" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Revise loop: review → dry-run -->
+  <path d="M870,210 C870,280 575,290 575,200" stroke="#b8860b" stroke-width="1.6" fill="none" stroke-dasharray="5 4" marker-end="url(#arrowAmber)"/>
+  <text x="720" y="280" class="loopLbl">revise (no AI run)</text>
+
+  <!-- Legend -->
+  <g transform="translate(40,300)">
+    <rect x="0" y="0" width="14" height="14" fill="#eef3fb" stroke="#3a7bd5"/>
+    <text x="20" y="12" class="sub" style="text-anchor:start">preview-first step</text>
+    <rect x="160" y="0" width="14" height="14" fill="#fff7df" stroke="#d4a017"/>
+    <text x="180" y="12" class="sub" style="text-anchor:start">human gate</text>
+    <rect x="290" y="0" width="14" height="14" fill="#eaf3ff" stroke="#1565c0"/>
+    <text x="310" y="12" class="sub" style="text-anchor:start">explicit opt-in</text>
+    <rect x="420" y="0" width="14" height="14" fill="#fdecef" stroke="#ad1457"/>
+    <text x="440" y="12" class="sub" style="text-anchor:start">human-only action</text>
+  </g>
+</svg>
