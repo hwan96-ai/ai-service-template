@@ -10,13 +10,15 @@
 
 A Windows + PowerShell layer that wraps Codex CLI and Claude Code CLI with dry-run defaults, prompt-only artifacts, and a human-reviewable final handoff. It never auto-commits, auto-pushes, deploys, or installs dependencies on your behalf.
 
+- 🇰🇷 Korean guide: [README_KO.md](README_KO.md)
+
 ## At A Glance
 
 |  | Summary |
 | --- | --- |
 | **What it is** | Local safety layer around Codex CLI + Claude Code CLI: dry-run defaults, prompt-only artifacts, `AI_FINAL_HANDOFF.md` for human review. |
 | **What it is not** | Not a hosted coding service, not a CLI replacement, not an automation framework, not an MCP / plugin runtime. |
-| **Recommended version** | `v0.6.9` — preview-first; `-Apply` is required to write files. |
+| **Recommended version** | `v0.6.10` — preview-first; `-Apply` is required to write files. |
 | **Safety posture** | No auto-commit, no auto-push, no deploy, no dependency install, no permissive sandbox flags. |
 | **AI agents start here** | Read [`AI_AGENT_BOOTSTRAP.md`](AI_AGENT_BOOTSTRAP.md) first after install. |
 
@@ -24,13 +26,29 @@ A Windows + PowerShell layer that wraps Codex CLI and Claude Code CLI with dry-r
 
 ```mermaid
 flowchart LR
-    A[Install harness<br/>into target repo] --> B[AI reads<br/>AI_AGENT_BOOTSTRAP.md]
-    B --> C[Dry-run /<br/>prompt-only]
-    C --> D[Human review<br/>AI_FINAL_HANDOFF.md]
-    D -->|approved| E[Optional opt-in<br/>execution]
+    A["📦 Install harness<br/>into target repo"] --> B["🤖 AI reads<br/>AI_AGENT_BOOTSTRAP.md"]
+
+    subgraph PREVIEW ["🔒 Preview-first (default)"]
+        direction LR
+        B --> C["📝 Dry-run /<br/>prompt-only"]
+        C --> D{"👤 Human review<br/>AI_FINAL_HANDOFF.md"}
+    end
+
     D -->|revise| C
-    E --> F[Human commits<br/>manually]
+    D -->|approve| E["⚡ Optional opt-in<br/>execution"]
+    E --> F["✅ Human commits<br/>manually"]
+
+    classDef safe fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
+    classDef gate fill:#fff8e1,stroke:#f9a825,color:#5d4037;
+    classDef action fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
+    classDef human fill:#fce4ec,stroke:#ad1457,color:#880e4f;
+    class A,B,C safe;
+    class D gate;
+    class E action;
+    class F human;
 ```
+
+Legend: 🔒 green = preview-first defaults · 🟡 yellow = human gate · 🔵 blue = explicit opt-in execution · 🔴 pink = human-only action.
 
 You want Codex CLI or Claude Code CLI to help in a real repository. You do not want them to commit, push, deploy, install packages, or bypass review. This project is the local safety layer between those AI tools and your repository.
 
@@ -38,7 +56,7 @@ This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workf
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-> Template version: `0.6.9`. See `TEMPLATE_CHANGELOG.md` for release history.
+> Template version: `0.6.10`. See `TEMPLATE_CHANGELOG.md` for release history.
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
@@ -121,20 +139,20 @@ first to preview the copy plan.
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.9/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.10/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # Preview first. No files are written.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.9 `
+  -Version v0.6.10 `
   -IncludeLocalGitignoreRules
 
 # If the preview looks safe, apply the install.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.9 `
+  -Version v0.6.10 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```

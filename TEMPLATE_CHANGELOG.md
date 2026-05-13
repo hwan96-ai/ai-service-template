@@ -3,10 +3,35 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.9`
+> **Current template version:** `0.6.10`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.10 - Workflow diagram polish and Korean README
+
+Changed:
+
+- `README.md` Mermaid workflow refined: grouped the preview-first
+  stages into a `subgraph`, added `classDef` styling (safe / gate /
+  action / human) with a short legend, and kept the diagram compact
+  (install → bootstrap → dry-run → human review → optional opt-in
+  execution → manual commit). No images or SVG assets added.
+- `README.md` install examples and displayed template version pinned
+  to `v0.6.10`. Install examples remain preview-first (first block
+  without `-Apply`, second block with `-Apply`).
+- Added `README_KO.md`, a practical Korean explanation document
+  (what it is / is not, when to use it, preview-first install,
+  document roles, human-only actions, v0.6.10 usage examples).
+  Linked from `README.md` near the top.
+- `TEMPLATE_MANIFEST.json` `templateVersion` bumped to `0.6.10` and
+  `README_KO.md` added to `requiredFiles`.
+
+Confirmed:
+
+- No runtime behavior change. No script, tool, installer, copy, or
+  test behavior changed. No new dependencies, no MCP, no plugin
+  system, no generated images or SVG assets.
 
 ## 0.6.9 - README visual polish
 
