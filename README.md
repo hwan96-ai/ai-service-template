@@ -1,16 +1,36 @@
 # AI Service Template
 
 [![Pester Safety Tests](https://github.com/hwan96-ai/ai-service-template/actions/workflows/pester.yml/badge.svg)](https://github.com/hwan96-ai/ai-service-template/actions/workflows/pester.yml)
+[![Latest Release](https://img.shields.io/github/v/release/hwan96-ai/ai-service-template?display_name=tag&sort=semver)](https://github.com/hwan96-ai/ai-service-template/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#requirements)
 
-Local safety harness for Codex CLI and Claude Code CLI in real repos.
+> **Local, preview-first AI coding safety harness for Codex CLI and Claude Code — human-in-the-loop by default.**
+
+A Windows + PowerShell layer that wraps Codex CLI and Claude Code CLI with dry-run defaults, prompt-only artifacts, and a human-reviewable final handoff. It never auto-commits, auto-pushes, deploys, or installs dependencies on your behalf.
 
 ## At A Glance
 
-- **What it is:** a local, Windows + PowerShell safety layer that wraps Codex CLI and Claude Code CLI with dry-run defaults, prompt-only artifacts, and a final human-reviewable `AI_FINAL_HANDOFF.md`.
-- **What it is not:** a hosted coding service, a CLI replacement, an automation framework, or an MCP / plugin runtime.
-- **Recommended install version:** `v0.6.8` (preview-first; `-Apply` is required to write files).
-- **Safety posture:** preview-first. The harness does not auto-commit, auto-push, deploy, install dependencies, or add MCP / plugin behavior.
-- **For AI agents:** read `AI_AGENT_BOOTSTRAP.md` first after install.
+|  | Summary |
+| --- | --- |
+| **What it is** | Local safety layer around Codex CLI + Claude Code CLI: dry-run defaults, prompt-only artifacts, `AI_FINAL_HANDOFF.md` for human review. |
+| **What it is not** | Not a hosted coding service, not a CLI replacement, not an automation framework, not an MCP / plugin runtime. |
+| **Recommended version** | `v0.6.9` — preview-first; `-Apply` is required to write files. |
+| **Safety posture** | No auto-commit, no auto-push, no deploy, no dependency install, no permissive sandbox flags. |
+| **AI agents start here** | Read [`AI_AGENT_BOOTSTRAP.md`](AI_AGENT_BOOTSTRAP.md) first after install. |
+
+## Workflow
+
+```mermaid
+flowchart LR
+    A[Install harness<br/>into target repo] --> B[AI reads<br/>AI_AGENT_BOOTSTRAP.md]
+    B --> C[Dry-run /<br/>prompt-only]
+    C --> D[Human review<br/>AI_FINAL_HANDOFF.md]
+    D -->|approved| E[Optional opt-in<br/>execution]
+    D -->|revise| C
+    E --> F[Human commits<br/>manually]
+```
 
 You want Codex CLI or Claude Code CLI to help in a real repository. You do not want them to commit, push, deploy, install packages, or bypass review. This project is the local safety layer between those AI tools and your repository.
 
@@ -18,7 +38,7 @@ This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workf
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-> Template version: `0.6.8`. See `TEMPLATE_CHANGELOG.md` for release history.
+> Template version: `0.6.9`. See `TEMPLATE_CHANGELOG.md` for release history.
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
@@ -37,18 +57,6 @@ automation, automatic commits or deploys, dependency installation, permissive
 sandbox flags, or a guarantee that every trusted repo script is side-effect
 free. The harness adds reviewable gates and conservative defaults; it does not
 claim full security or replace human judgment.
-
-```mermaid
-flowchart TD
-    A[Customize control docs] --> B[Run dry-run or prompt-only mode]
-    B --> C[Review local ai-runs artifacts]
-    C --> D[Read AI_FINAL_HANDOFF.md]
-    D --> E{Human approves next step?}
-    E -- No --> F[Stop, revise, or discard locally]
-    E -- Yes --> G[Optionally opt in to Codex or Claude execution]
-    G --> H[Review diff, checks, and handoff]
-    H --> I[Human commits and pushes manually]
-```
 
 ## Requirements
 
@@ -113,20 +121,20 @@ first to preview the copy plan.
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.8/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.9/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # Preview first. No files are written.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.8 `
+  -Version v0.6.9 `
   -IncludeLocalGitignoreRules
 
 # If the preview looks safe, apply the install.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.8 `
+  -Version v0.6.9 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```

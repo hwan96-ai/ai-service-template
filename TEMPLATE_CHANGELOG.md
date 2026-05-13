@@ -3,10 +3,29 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.8`
+> **Current template version:** `0.6.9`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.9 - README visual polish
+
+Changed:
+
+- `README.md` first-screen polish: added latest-release, license,
+  PowerShell, and Windows badges next to the existing Pester Safety
+  Tests badge; tightened the one-line tagline to highlight
+  preview-first, human-in-the-loop, and Codex CLI / Claude Code use;
+  reformatted "At A Glance" as a compact table; added a compact
+  Mermaid workflow diagram (install → bootstrap → dry-run → human
+  review → optional execution → manual commit); install examples
+  pinned to `v0.6.9` and remain preview-first.
+
+Confirmed:
+
+- No runtime behavior change. No script, tool, installer, copy, or
+  test behavior changed. No new dependencies, no MCP, no plugin
+  system, no generated images or SVG assets.
 
 ## 0.6.8 - README polish and installer readability refactor
 
