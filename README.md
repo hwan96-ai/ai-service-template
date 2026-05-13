@@ -217,7 +217,7 @@ it makes their use more deliberate, reviewable, and repeatable.
 
 ## What The Harness Does Not Do
 
-- It does not understand your service until you fill in `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md`
+- It does not understand your service until you fill in `AI_PRODUCT_SPEC.md` and `AI_TASK_QUEUE.md` in the target repo
 - It does not replace Codex CLI, Claude Code CLI, ChatGPT, or Claude accounts
 - It does not run Codex or Claude unless the matching run switches are provided
 - It does not commit, push, deploy, install dependencies, tag releases, or merge branches
@@ -227,12 +227,11 @@ it makes their use more deliberate, reviewable, and repeatable.
 
 ## Repository Layout
 
+Root files describe the harness itself. `template-payload/` holds the downstream service control docs that get copied into a target service repo (at the target's root) when you install the harness. You do not need to read `template-payload/` before the first preview run.
+
+
 ```text
 D:\ai-service-template
-|-- AI_PRODUCT_SPEC.md
-|-- AI_ACCEPTANCE_CRITERIA.md
-|-- AI_TASK_QUEUE.md
-|-- AI_WORKFLOW.md
 |-- AI_AGENT_BOOTSTRAP.md
 |-- AGENTS.md
 |-- CLAUDE.md
@@ -241,6 +240,11 @@ D:\ai-service-template
 |-- SERVICE_ONBOARDING_CHECKLIST.md
 |-- TEMPLATE_CHANGELOG.md
 |-- TEMPLATE_MANIFEST.json
+|-- template-payload/
+|   |-- AI_PRODUCT_SPEC.md
+|   |-- AI_ACCEPTANCE_CRITERIA.md
+|   |-- AI_TASK_QUEUE.md
+|   `-- AI_WORKFLOW.md
 |-- examples/
 |   `-- sample-AI_FINAL_HANDOFF.md
 |-- ai-runs/
@@ -263,12 +267,10 @@ D:\ai-service-template
 | File | Role |
 |------|------|
 | `tools/ai-autopilot.ps1` | Main local orchestrator. This is where a harness run starts. |
-| `AI_PRODUCT_SPEC.md` | Human-written service context for the target repo. |
 | `AI_AGENT_BOOTSTRAP.md` | First-read instructions for AI coding agents after install. |
-| `AI_TASK_QUEUE.md` | Human-written work queue for the target repo. |
-| `AI_ACCEPTANCE_CRITERIA.md` | Completion and safety criteria. |
 | `AGENTS.md` | Guardrails for Codex CLI. |
 | `CLAUDE.md` | Guardrails for Claude Code CLI. |
+| `template-payload/` | Downstream service control docs (`AI_PRODUCT_SPEC.md`, `AI_TASK_QUEUE.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AI_WORKFLOW.md`) copied into the target service repo at install time. |
 | `TEMPLATE_USAGE.md` | Deeper usage guide. |
 | `SERVICE_ONBOARDING_CHECKLIST.md` | Checklist for applying the harness to a service repo. |
 | `tools/copy-template-to-service.ps1` | Preview-first copy script for installing the harness into another repo. |

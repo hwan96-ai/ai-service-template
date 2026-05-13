@@ -21,6 +21,9 @@ docs as the task demands.
 
 **Reference as needed (read when the task actually requires it):**
 
+These are downstream-service context files, not core harness docs. They live at
+the repo root.
+
 - `AI_PRODUCT_SPEC.md` — service context, scope, out-of-scope areas.
 - `AI_TASK_QUEUE.md` — active task and allow-list.
 - `AI_ACCEPTANCE_CRITERIA.md` — completion and safety criteria.

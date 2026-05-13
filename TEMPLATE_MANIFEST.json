@@ -30,6 +30,13 @@
     "AGENTS.md",
     "CLAUDE.md"
   ],
+  "payloadSourceDir": "template-payload",
+  "payloadDocuments": [
+    "AI_PRODUCT_SPEC.md",
+    "AI_ACCEPTANCE_CRITERIA.md",
+    "AI_TASK_QUEUE.md",
+    "AI_WORKFLOW.md"
+  ],
   "toolFiles": [
     "tools/ai-autopilot.ps1",
     "tools/collect-context.ps1",

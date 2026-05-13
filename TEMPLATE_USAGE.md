@@ -18,10 +18,13 @@ path is short:
    `AI_FINAL_HANDOFF.md` before applying anything or opting in to real AI
    execution.
 
-The other control documents (`AI_PRODUCT_SPEC.md`, `AI_TASK_QUEUE.md`,
-`AI_ACCEPTANCE_CRITERIA.md`, `AI_WORKFLOW.md`) are worth filling in when you
-move past dry-run, but they are not gating prerequisites for your first preview.
-This is a personal safety harness, not a corporate onboarding process.
+The downstream service control documents (`AI_PRODUCT_SPEC.md`,
+`AI_TASK_QUEUE.md`, `AI_ACCEPTANCE_CRITERIA.md`, `AI_WORKFLOW.md`) are stored
+under `template-payload/` in this template repo and installed at the target
+service repo root by the copy script. After install, refer to them by their
+root names. They are worth filling in when you move past dry-run, but they are
+not gating prerequisites for your first preview. This is a personal safety
+harness, not a corporate onboarding process.
 
 ## When To Read This
 
@@ -42,6 +45,7 @@ Customize these files in the target service repo before real work:
 - `AI_TASK_QUEUE.md` - add one or more small tasks and mark the active task.
 - `AI_ACCEPTANCE_CRITERIA.md` - adapt the checklist to the target repo while
   keeping the safety gates intact.
+- `AI_WORKFLOW.md` - adjust workflow detail to match the target repo.
 
 Usually leave these files unchanged at first:
 

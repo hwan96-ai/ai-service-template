@@ -88,6 +88,21 @@ if ($manifest.controlDocuments) {
     }
 }
 
+# Payload documents live under template-payload/ in the template repo but are
+# installed at the target repo root. The manifest tracks their target-relative
+# paths in requiredFiles/controlDocuments; payloadSourceDir + payloadDocuments
+# tell this script where to read them from in the template source.
+$payloadSourceDir = ''
+if ($manifest.payloadSourceDir) {
+    $payloadSourceDir = [string]$manifest.payloadSourceDir
+}
+$payloadDocs = @()
+if ($manifest.payloadDocuments) {
+    foreach ($d in $manifest.payloadDocuments) {
+        $payloadDocs += [string]$d
+    }
+}
+
 # Build the file copy list: requiredFiles + toolFiles + sentinelFiles.
 # We keep paths as relative-from-template-root, with forward slashes in the manifest
 # converted to the platform separator for filesystem operations.
@@ -131,7 +146,11 @@ foreach ($rel in $relativeFiles) {
     }
 
     $relNative = $rel -replace '/','\'
-    $sourcePath = Join-Path $templateRoot $relNative
+    $sourceRel = $relNative
+    if ($payloadDocs -contains $rel -and -not [string]::IsNullOrWhiteSpace($payloadSourceDir)) {
+        $sourceRel = Join-Path $payloadSourceDir $relNative
+    }
+    $sourcePath = Join-Path $templateRoot $sourceRel
     $targetPath = Join-Path $resolvedTarget $relNative
 
     if (-not (Test-Path -LiteralPath $sourcePath)) {
