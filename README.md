@@ -109,6 +109,13 @@ $u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.5/too
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
+# Preview first. No files are written.
+powershell -ExecutionPolicy Bypass -File $p `
+  -TargetRepo . `
+  -Version v0.6.5 `
+  -IncludeLocalGitignoreRules
+
+# If the preview looks safe, apply the install.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
   -Version v0.6.5 `
@@ -271,3 +278,4 @@ phases.
 ## License
 
 This repository is released under the MIT License. See [LICENSE](LICENSE).
+
