@@ -1,6 +1,6 @@
 {
   "templateName": "ai-service-template",
-  "templateVersion": "0.6.7",
+  "templateVersion": "0.6.8",
   "phasesImplemented": [1, 2, 3, 4, 5, 6],
   "description": "Reusable, safety-first local AI automation harness. Coordinates Codex CLI (implementer), Claude Code CLI (reviewer), local tests, and a final human handoff without ever committing, pushing, deploying, or installing dependencies on its own.",
   "requiredFiles": [

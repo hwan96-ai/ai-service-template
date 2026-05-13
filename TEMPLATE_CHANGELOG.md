@@ -3,10 +3,31 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.7`
+> **Current template version:** `0.6.8`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.6.8 - README polish and installer readability refactor
+
+Changed:
+
+- `README.md` reorganized with an "At A Glance" summary, clearer
+  preview-first install examples pinned to `v0.6.8`, and explicit
+  safety wording (no auto-commit, no auto-push, no deploy, no
+  dependency install, no MCP or plugin behavior). AI agents are still
+  directed to read `AI_AGENT_BOOTSTRAP.md` first.
+- `tools/install-ai-service-template.ps1` refactored into small
+  helper functions for readability. Parameters, defaults, preview /
+  apply behavior, archive download / extraction, copy-script
+  discovery, and named-parameter hashtable splat forwarding are
+  unchanged.
+
+Confirmed:
+
+- No behavior change. Same parameters, same preview-first default,
+  same `-Apply`, `-IncludeLocalGitignoreRules`, and copy-script
+  invocation. No new network calls or dependencies.
 
 ## 0.6.7 - Installer argument forwarding fix
 

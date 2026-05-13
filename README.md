@@ -4,13 +4,21 @@
 
 Local safety harness for Codex CLI and Claude Code CLI in real repos.
 
+## At A Glance
+
+- **What it is:** a local, Windows + PowerShell safety layer that wraps Codex CLI and Claude Code CLI with dry-run defaults, prompt-only artifacts, and a final human-reviewable `AI_FINAL_HANDOFF.md`.
+- **What it is not:** a hosted coding service, a CLI replacement, an automation framework, or an MCP / plugin runtime.
+- **Recommended install version:** `v0.6.8` (preview-first; `-Apply` is required to write files).
+- **Safety posture:** preview-first. The harness does not auto-commit, auto-push, deploy, install dependencies, or add MCP / plugin behavior.
+- **For AI agents:** read `AI_AGENT_BOOTSTRAP.md` first after install.
+
 You want Codex CLI or Claude Code CLI to help in a real repository. You do not want them to commit, push, deploy, install packages, or bypass review. This project is the local safety layer between those AI tools and your repository.
 
 This is not a replacement for Codex CLI or Claude Code CLI. It wraps local workflow scripts, prompts, guardrails, test detection, and final handoff artifacts around those tools. `/goal` and `/ralph` are workflow prompt conventions for Codex CLI / Claude Code style sessions, not PowerShell commands and not the full runtime. End-to-end execution still requires local CLI setup, authentication, and explicit script flags.
 
 The current implementation is Windows + PowerShell focused. The default posture is dry-run and prompt-only. Real AI execution requires explicit opt-in, and the harness never commits, pushes, deploys, installs dependencies, or uses permissive sandbox flags on its own. Every run ends with a human-reviewable `AI_FINAL_HANDOFF.md`.
 
-> Template version: `0.6.7`. See `TEMPLATE_CHANGELOG.md` for release history.
+> Template version: `0.6.8`. See `TEMPLATE_CHANGELOG.md` for release history.
 
 For safety boundaries, trust assumptions, and non-goals, see [SECURITY.md](SECURITY.md). An optional `.gitleaks.toml` is included for local secret scanning; see the "Optional Secret Scanning" section in `SECURITY.md`.
 
@@ -105,20 +113,20 @@ first to preview the copy plan.
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.7/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.8/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # Preview first. No files are written.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.7 `
+  -Version v0.6.8 `
   -IncludeLocalGitignoreRules
 
 # If the preview looks safe, apply the install.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.7 `
+  -Version v0.6.8 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```
@@ -130,7 +138,8 @@ pipe-to-execute.
 Existing `README.md`, `AGENTS.md`, `CLAUDE.md`, `AI_AGENT_BOOTSTRAP.md`, and AI
 control docs are preserved by default. After install, ask AI coding agents to
 read `AI_AGENT_BOOTSTRAP.md` first. This is a local human-in-the-loop safety
-harness, not a full automation framework or MCP server.
+harness. It does not auto-commit, auto-push, deploy, install dependencies, or
+add MCP or plugin behavior.
 
 ## 2-Minute Quickstart
 
