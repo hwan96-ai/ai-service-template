@@ -3,10 +3,54 @@
 Phase-by-phase changelog for the AI service template. Commit ids reference
 this template repository's history.
 
-> **Current template version:** `0.6.11`
+> **Current template version:** `0.7.0`
 >
 > Versioning is informational only. Each phase keeps every prior phase's
 > safety guarantees intact.
+
+## 0.7.0 - BREAKING: agent rules distributed to `.claude/rules/`
+
+**BREAKING for downstream services that vendored the prior single-file
+`CLAUDE.md`.** The slim `CLAUDE.md` and `AGENTS.md` at the repo root are now
+**indices** that link to four rule files under `.claude/rules/`. Agents that
+auto-load only the entrypoint file (and do not follow links) will see only
+the index and miss the actual rules.
+
+Changed:
+
+- `CLAUDE.md` and `AGENTS.md` reduced to thin indices. The body of each
+  rule moved to `.claude/rules/{start-here,operating-mode,editing-rules,escape-hatch}.md`.
+- `AI_AGENT_BOOTSTRAP.md` Read Order now explicitly lists the four rule
+  files. Agents must read every linked rule, not just the entrypoint.
+- Each rule file carries frontmatter (`name`, `description`, `type`, `owner`)
+  so multi-agent harnesses (Claude Code, Codex CLI, Cursor, Gemini) can
+  identify the rule type uniformly.
+- Added `QUICKSTART.md` — 5-minute onboarding cheat-sheet.
+- Added `template-payload/WARNING.md` — explicit "no real secrets, no PII"
+  guard for the placeholder payload directory.
+- Added `bin/agent-dry-run.ps1` — 30-second dry-run that proves agents read
+  the rule files.
+- Added `bin/agent-bootstrap.ps1` — entrypoint mapper that outputs the
+  correct rules file path for `claude`, `codex`, or other agents.
+- Added `.github/workflows/rules-integrity.yml` — CI gate for markdown link
+  integrity and rule-file frontmatter validation.
+
+Migration (existing downstream services on v0.6.x):
+
+1. Pull this template version.
+2. Verify `.claude/rules/` directory copied across.
+3. Update any local fork of `CLAUDE.md`/`AGENTS.md` that still embedded the
+   full rule text — replace with the new index and keep the prior rule
+   content in `.claude/rules/` (or merge into the existing files there).
+4. Re-run `bin/agent-dry-run.ps1` to confirm your agent reads all four
+   rules.
+
+Confirmed:
+
+- No runtime behavior change. No script logic changed. No new dependencies.
+  Safety rules unchanged in content; only their physical layout moved.
+- The "no auto-commit, no auto-push, no auto-deploy, no auto-install"
+  guarantees are preserved verbatim in `.claude/rules/operating-mode.md`.
 
 ## 0.6.11 - Hero banner, static SVG workflow, README scannability
 
