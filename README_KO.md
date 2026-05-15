@@ -99,8 +99,12 @@ powershell -ExecutionPolicy Bypass -File $p `
 | 문서 | 역할 |
 | --- | --- |
 | `AI_AGENT_BOOTSTRAP.md` | 설치 후 AI 에이전트가 **가장 먼저 읽어야 하는 안내문**. 안전 규칙과 작업 흐름을 요약합니다. |
-| `AGENTS.md` | Codex CLI 용 가드레일 및 작업 규칙. |
-| `CLAUDE.md` | Claude Code CLI 용 가드레일 및 작업 규칙. |
+| `AGENTS.md` | Codex CLI/Cursor 용 **인덱스**. 실제 규칙은 `.claude/rules/` 하위 4개 파일에 있습니다. |
+| `CLAUDE.md` | Claude Code CLI 용 **인덱스**. 실제 규칙은 `.claude/rules/` 하위 4개 파일에 있습니다. |
+| `.claude/rules/start-here.md` | 진입점 및 필수 읽기 순서. |
+| `.claude/rules/operating-mode.md` | 기본 운영 모드와 절대 금지 규칙(commit/push/deploy/의존성 설치 금지 등). |
+| `.claude/rules/editing-rules.md` | 외과적 편집 규율(allow-list 내부만, 최소 diff). |
+| `.claude/rules/escape-hatch.md` | 충돌 시 행동 절차. |
 | `AI_PRODUCT_SPEC.md` | 대상 서비스의 사람이 쓴 컨텍스트(무엇을 만드는 서비스인지). |
 | `AI_TASK_QUEUE.md` | 사람이 관리하는 작업 큐. |
 | `AI_ACCEPTANCE_CRITERIA.md` | 완료 조건과 안전 기준. |

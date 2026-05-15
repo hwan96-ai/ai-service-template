@@ -3,7 +3,9 @@ ai-runs/*
 !ai-runs/.gitkeep
 
 # Local Claude Code CLI state (per-machine permission settings, session data)
-.claude/
+.claude/*
+# Exception: shared agent rules are intentional project content, not CLI state
+!.claude/rules/
 
 # Accidental Unix-style home-directory artifacts from local tooling
 /~/

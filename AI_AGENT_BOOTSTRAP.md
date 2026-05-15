@@ -14,10 +14,21 @@ docs as the task demands.
 1. `README.md` — what this harness is and what its smallest useful workflow looks like.
 2. `AI_AGENT_BOOTSTRAP.md` — this file.
 
-**Agent rules (read the one that applies to you):**
+**Agent rules (read the one that applies to you, then read ALL linked rule files it points to):**
 
 - `AGENTS.md` if you are Codex CLI.
 - `CLAUDE.md` if you are Claude Code.
+
+Both entrypoints are thin indices. You MUST read every file under
+`.claude/rules/` before acting:
+
+1. `.claude/rules/start-here.md` — required reads and entry point.
+2. `.claude/rules/operating-mode.md` — default mode and hard prohibitions.
+3. `.claude/rules/editing-rules.md` — surgical-edit discipline.
+4. `.claude/rules/escape-hatch.md` — what to do on conflict.
+
+Reading only the index file is insufficient. Skipping any linked rule
+is a safety regression.
 
 **Reference as needed (read when the task actually requires it):**
 
