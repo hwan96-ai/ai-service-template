@@ -283,8 +283,10 @@ function New-TemplateRuntimeRepo {
     )
     $rootFiles = @('AGENTS.md', 'CLAUDE.md')
 
+    # Windows PowerShell 5.1 Join-Path takes only two positional args; nest the calls.
+    $payloadRoot = Join-Path $script:RepoRoot 'template-payload'
     foreach ($file in $payloadFiles) {
-        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'template-payload' $file) -Destination (Join-Path $target $file)
+        Copy-Item -LiteralPath (Join-Path $payloadRoot $file) -Destination (Join-Path $target $file)
     }
     foreach ($file in $rootFiles) {
         Copy-Item -LiteralPath (Join-Path $script:RepoRoot $file) -Destination (Join-Path $target $file)
