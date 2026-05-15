@@ -273,16 +273,20 @@ function New-TemplateRuntimeRepo {
         Pop-Location
     }
 
-    $controlFiles = @(
+    # AI_* control docs live in template-payload/ since v0.6.x (commit e1a01aa).
+    # AGENTS.md and CLAUDE.md remain at the repo root as agent entrypoints.
+    $payloadFiles = @(
         'AI_PRODUCT_SPEC.md',
         'AI_ACCEPTANCE_CRITERIA.md',
         'AI_TASK_QUEUE.md',
-        'AI_WORKFLOW.md',
-        'AGENTS.md',
-        'CLAUDE.md'
+        'AI_WORKFLOW.md'
     )
+    $rootFiles = @('AGENTS.md', 'CLAUDE.md')
 
-    foreach ($file in $controlFiles) {
+    foreach ($file in $payloadFiles) {
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'template-payload' $file) -Destination (Join-Path $target $file)
+    }
+    foreach ($file in $rootFiles) {
         Copy-Item -LiteralPath (Join-Path $script:RepoRoot $file) -Destination (Join-Path $target $file)
     }
 

@@ -398,8 +398,8 @@ Describe 'AI Service Template safety guardrails' {
         $combinedDocs = @(
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'README.md') -Raw
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'TEMPLATE_USAGE.md') -Raw
-            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'AI_WORKFLOW.md') -Raw
-            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'AI_ACCEPTANCE_CRITERIA.md') -Raw
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'template-payload' 'AI_WORKFLOW.md') -Raw
+            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'template-payload' 'AI_ACCEPTANCE_CRITERIA.md') -Raw
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'SECURITY.md') -Raw
         ) -join [Environment]::NewLine
 
