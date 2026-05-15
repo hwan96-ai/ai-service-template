@@ -1,0 +1,77 @@
+name: rules-integrity
+
+on:
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'AI_AGENT_BOOTSTRAP.md'
+      - '.claude/rules/**'
+      - '.github/workflows/rules-integrity.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'AI_AGENT_BOOTSTRAP.md'
+      - '.claude/rules/**'
+
+jobs:
+  links-and-frontmatter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify all rule files exist
+        run: |
+          set -e
+          for f in start-here.md operating-mode.md editing-rules.md escape-hatch.md; do
+            if [ ! -f ".claude/rules/$f" ]; then
+              echo "MISSING: .claude/rules/$f"
+              exit 1
+            fi
+          done
+          echo "All four rule files present."
+
+      - name: Validate rule frontmatter
+        run: |
+          set -e
+          missing=0
+          for f in .claude/rules/*.md; do
+            if ! head -n 1 "$f" | grep -q '^---$'; then
+              echo "FAIL: $f has no frontmatter opener"
+              missing=$((missing+1))
+              continue
+            fi
+            for key in name description type owner; do
+              if ! sed -n '1,20p' "$f" | grep -q "^${key}:"; then
+                echo "FAIL: $f missing frontmatter key '${key}'"
+                missing=$((missing+1))
+              fi
+            done
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo "Frontmatter validation failed: $missing issues"
+            exit 1
+          fi
+          echo "All rule frontmatter valid."
+
+      - name: Check index links resolve
+        run: |
+          set -e
+          fail=0
+          for entry in CLAUDE.md AGENTS.md; do
+            grep -oE '\.claude/rules/[a-z-]+\.md' "$entry" | sort -u | while read link; do
+              if [ ! -f "$link" ]; then
+                echo "BROKEN LINK in $entry -> $link"
+                fail=1
+              fi
+            done
+            if [ "$fail" = "1" ]; then exit 1; fi
+          done
+          echo "All index links resolve."
+
+      - name: Flag SECURITY review for rule edits
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "::notice::Changes to safety-critical rule files were detected. Maintainers should add the 'security-review' label before merging."
