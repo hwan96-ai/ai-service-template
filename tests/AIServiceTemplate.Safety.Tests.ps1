@@ -395,11 +395,13 @@ Describe 'AI Service Template safety guardrails' {
     }
 
     It 'documents selected local checks as trusted-repository opt-in checks with script-internal limitations' {
+        # Windows PowerShell 5.1 Join-Path takes only two positional args; nest the calls.
+        $payloadRoot = Join-Path $script:RepoRoot 'template-payload'
         $combinedDocs = @(
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'README.md') -Raw
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'TEMPLATE_USAGE.md') -Raw
-            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'AI_WORKFLOW.md') -Raw
-            Get-Content -LiteralPath (Join-Path $script:RepoRoot 'AI_ACCEPTANCE_CRITERIA.md') -Raw
+            Get-Content -LiteralPath (Join-Path $payloadRoot 'AI_WORKFLOW.md') -Raw
+            Get-Content -LiteralPath (Join-Path $payloadRoot 'AI_ACCEPTANCE_CRITERIA.md') -Raw
             Get-Content -LiteralPath (Join-Path $script:RepoRoot 'SECURITY.md') -Raw
         ) -join [Environment]::NewLine
 
