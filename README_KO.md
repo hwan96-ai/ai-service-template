@@ -62,20 +62,20 @@
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.11/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.7.0/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # 1) 미리보기 (파일은 아직 쓰이지 않음)
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.11 `
+  -Version v0.7.0 `
   -IncludeLocalGitignoreRules
 
 # 2) 미리보기가 안전해 보이면 적용
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.11 `
+  -Version v0.7.0 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```
@@ -121,7 +121,7 @@ powershell -ExecutionPolicy Bypass -File $p `
 
 이 하네스는 위 작업을 자동으로 수행하지 않으며, 그렇게 보이는 플래그(`--full-auto`, `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-skip-permissions` 등)도 기본값으로 사용하지 않습니다.
 
-## 9. v0.6.11 기준 빠른 사용 예시
+## 9. v0.7.0 기준 빠른 사용 예시
 
 대상 서비스 저장소에 하네스가 이미 설치되어 있다고 가정합니다.
 

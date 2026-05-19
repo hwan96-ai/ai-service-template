@@ -56,7 +56,7 @@ You want Codex CLI or Claude Code CLI to help in a real repository, but you do n
 
 </details>
 
-> Template version: `0.6.11`. See [`TEMPLATE_CHANGELOG.md`](TEMPLATE_CHANGELOG.md) for release history. Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md). An optional `.gitleaks.toml` is included for local secret scanning; see "Optional Secret Scanning" in [SECURITY.md](SECURITY.md).
+> Template version: `0.7.0`. See [`TEMPLATE_CHANGELOG.md`](TEMPLATE_CHANGELOG.md) for release history. Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md). An optional `.gitleaks.toml` is included for local secret scanning; see "Optional Secret Scanning" in [SECURITY.md](SECURITY.md).
 
 ## Requirements
 
@@ -121,20 +121,20 @@ first to preview the copy plan.
 ```powershell
 cd D:\some-project
 
-$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.6.11/tools/install-ai-service-template.ps1"
+$u = "https://raw.githubusercontent.com/hwan96-ai/ai-service-template/v0.7.0/tools/install-ai-service-template.ps1"
 $p = "$env:TEMP\install-ai-service-template.ps1"
 Invoke-WebRequest $u -OutFile $p
 
 # Preview first. No files are written.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.11 `
+  -Version v0.7.0 `
   -IncludeLocalGitignoreRules
 
 # If the preview looks safe, apply the install.
 powershell -ExecutionPolicy Bypass -File $p `
   -TargetRepo . `
-  -Version v0.6.11 `
+  -Version v0.7.0 `
   -Apply `
   -IncludeLocalGitignoreRules
 ```
