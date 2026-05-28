@@ -1,23 +1,23 @@
-# AGENTS.md - Coding Agent Instructions
+# AGENTS.md - General Agent Router
 
-This file is for Codex, Cursor, and other AI coding agents working in a repo
-that uses this template. Use uppercase `AGENTS.md`.
+This file is the concise entrypoint for Codex, Cursor, and other coding agents.
+Keep durable project instructions in `docs/claude/` instead of duplicating them
+here.
 
-## Start Here
+## Required Read Order
 
-Read `AI_AGENT_BOOTSTRAP.md` first. Then read every rule file under
-`.claude/rules/` (listed below) before proposing or making changes.
+1. Read `AI_AGENT_BOOTSTRAP.md`.
+2. Read every required rule file referenced by the bootstrap.
+3. Read the shared instruction index at
+   [docs/claude/README.md](docs/claude/README.md).
 
-**Required:** Before any action — planning, review, or editing — you MUST
-read every linked rule file below in order. Reading only this index is
-insufficient. Each rule encodes safety guarantees that the others depend on.
+## Operating Boundary
 
-## Rule Index
+This repository is a Windows/PowerShell AI coding safety harness, not a product
+runtime. Work from repository evidence only, keep changes surgical, and do not
+change product behavior while editing harness documentation.
 
-1. [Start Here](.claude/rules/start-here.md) — required reads and entry point.
-2. [Operating Mode](.claude/rules/operating-mode.md) — default mode and hard prohibitions.
-3. [Editing Rules](.claude/rules/editing-rules.md) — surgical-edit discipline.
-4. [Escape Hatch](.claude/rules/escape-hatch.md) — what to do on conflict.
-
-These rules are the single source of truth shared by both Codex and Claude
-entrypoints. Do not embed copies elsewhere; link to the files above.
+Never expose secrets, credentials, deployment tokens, private customer details,
+internal URLs, proprietary implementation notes, or non-public business
+information. Public portfolio or showcase extraction must happen in a separate
+sanitized repository, never by making this original repository public.
